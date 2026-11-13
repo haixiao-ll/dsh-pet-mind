@@ -52,6 +52,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
 // 点击穿透兜底通道的纯判定（不依赖 Electron 的 forward 鼠标钩子；见文件头注释）
 const { decideWindowIgnore, pointerZone } = require('./pointer-target.js');
+const { largestRectOutside } = require('./capture-region.js');
 // 置顶看门狗：WS_EX_TOPMOST 只是样式位，不等于窗口真的在置顶带（见 topmost-watchdog.js 头部）
 const {
   TOPMOST_WATCHDOG_TICK_MS,
@@ -812,10 +813,44 @@ app.whenReady().then(() => {
       });
       // 优先主屏（id 形如 screen:0:0），退而求其次取第一块屏
       const primary = sources.find((s) => String(s.id).startsWith('screen:')) ?? sources[0];
-      const image = primary && primary.thumbnail;
-      if (!image || image.isEmpty()) return null;
-      const size = image.getSize();
-      const bmp = image.getBitmap(); // BGRA，原生 buffer，随作用域销毁
+      const shot = primary && primary.thumbnail;
+      if (!shot || shot.isEmpty()) return null;
+      const size = shot.getSize();
+
+      // 把桌宠自己的窗口从观测区抠掉：宠物一直在动，否则每一帧哈希都会变，
+      // "屏幕变过 = 人在"就永远成立（待机形同虚设）。换算到缩略图坐标系再裁。
+      let image = shot;
+      try {
+        const display = screen.getPrimaryDisplay().bounds;
+        const scaleX = display.width > 0 ? size.width / display.width : 1;
+        const scaleY = display.height > 0 ? size.height / display.height : 1;
+        const blockers = BrowserWindow.getAllWindows()
+          .filter((w) => w && !w.isDestroyed())
+          .map((w) => {
+            const b = w.getBounds();
+            return {
+              x: (b.x - display.x) * scaleX,
+              y: (b.y - display.y) * scaleY,
+              width: b.width * scaleX,
+              height: b.height * scaleY,
+            };
+          });
+        const region = largestRectOutside(size, blockers);
+        if (region.width < size.width || region.height < size.height) {
+          const cropped = shot.crop({
+            x: Math.round(region.x),
+            y: Math.round(region.y),
+            width: Math.round(region.width),
+            height: Math.round(region.height),
+          });
+          if (!cropped.isEmpty()) image = cropped;
+        }
+      } catch {
+        /* 裁剪失败就用整帧：宁可信号偏吵，也不能让截帧整体失败 */
+      }
+
+      // Electron 3x 起 getBitmap 已废弃；toBitmap 存在就用它，旧版本回落
+      const bmp = typeof image.toBitmap === 'function' ? image.toBitmap() : image.getBitmap(); // BGRA，随作用域销毁
       // FNV-1a 采样哈希：每 64 字节取一个，足够分辨"画面变了没有"，CPU 可忽略
       let hash = 2166136261;
       for (let i = 0; i < bmp.length; i += 64) {

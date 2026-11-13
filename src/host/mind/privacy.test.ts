@@ -51,9 +51,11 @@ test('云端白名单：只有显式写下的应用才可能出本机', () => {
   assert.equal(cloudAllowed('', { cloudAllowlist: ['code'] }), false);
 });
 
-test('桌宠自己的窗口不算"用户停留的应用"', () => {
+test('桌宠自己的窗口不算"用户停留的应用"（只认 Helper 的窗口标题）', () => {
   assert.equal(isSelfWindow('electron', 'dsh-pet 桌宠（桌面模式）'), true);
   assert.equal(isSelfWindow('electron', 'main.ts - my-project - Visual Studio Code'), false);
-  assert.equal(isSelfWindow('Code', 'main.ts - dsh-pet'), true);
+  // 关键回归：DSH 主窗口标题里带会话名（用户这次就叫"桌宠项目"），不能误判成自己的窗口
+  assert.equal(isSelfWindow('DeepSeek Harness', 'dsh-pet 桌宠项目 - DeepSeek Harness'), false);
+  assert.equal(isSelfWindow('Code', 'main.ts - dsh-pet'), false);
   assert.equal(isSelfWindow(undefined, undefined), false);
 });

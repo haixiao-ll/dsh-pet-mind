@@ -98,6 +98,8 @@ export interface MindStateView {
     reason: string;
   } | null;
   memory: { docs: number; indexChars: number };
+  /** 截帧状态：enabled=配置开没开；lastFrameAt=最近一帧时间；changedAt=最近"画面变了"的时间 */
+  vision: { enabled: boolean; lastFrameAt: number; changedAt: number };
   suggestion: { text: string; at: number } | null;
 }
 
@@ -122,6 +124,8 @@ export class Mind {
   private foregroundSince = 0;
   /** 截帧闸门：只存哈希与时间，不存任何像素（见 vision.ts） */
   private readonly frameGate = new FrameGate();
+  /** 本次进程收到过多少帧（只用于"第一帧"提示，不落盘） */
+  private frameCount = 0;
   private captureTimer: ReturnType<typeof setInterval> | null = null;
   private framePaused = false;
   private started = false;
@@ -387,6 +391,11 @@ export class Mind {
           }
         : null,
       memory: { docs, indexChars: this.store.readIndex().length },
+      vision: {
+        enabled: cfg.vision?.enabled === true,
+        lastFrameAt: this.frameGate.lastFrame(),
+        changedAt: this.frameGate.lastChange(),
+      },
       suggestion: this.lastSuggestion ? { text: this.lastSuggestion.text, at: this.lastSuggestion.at } : null,
     };
   }
@@ -427,6 +436,13 @@ export class Mind {
   /** Helper 回传的一帧摘要：校验 id/TTL，更新"最近变化"证据 */
   onFrame(signal: FrameSignal): FrameAccept {
     const result = this.frameGate.accept(signal);
+    if (result.ok && this.frameCount === 0) {
+      // 只在第一帧说一次：这是用户确认"截帧链路真的通了"的最快信号（日志里只有哈希与尺寸）
+      this.frameCount += 1;
+      this.deps.log(`桌面感知：截帧链路已通（${signal.width}×${signal.height}，只回哈希，不落盘）`);
+    } else if (result.ok) {
+      this.frameCount += 1;
+    }
     if (result.ok && result.changed && this.standby) {
       // 屏幕刚变过 = 人回来了：立刻解除待机（下一次采样会用 changedRecently 保持住）
       this.standby = false;

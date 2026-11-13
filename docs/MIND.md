@@ -159,8 +159,10 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 `mind.vision.enabled=true` 后，桌面 Helper 每 `intervalMs`（默认 30s）做一次：
 
 1. 主进程 `desktopCapturer.getSources` 拿一张 **640×360 缩略图**（只在内存）；
-2. 对 BGRA 位图每 64 字节采样，算 FNV-1a 哈希；
-3. 图像对象立刻被垃圾回收，**只把 `{hash, width, height}` 回给宿主**。
+2. **先把桌宠自己的窗口从画面里裁掉**（`capture-region.js`：按窗口矩形取面积最大的那一侧）。
+   不裁的话宠物动画会让每一帧哈希都变，"人在"的证据就永远成立——实跑踩到过；
+3. 对剩下的 BGRA 位图每 64 字节采样，算 FNV-1a 哈希；
+4. 图像对象立刻被垃圾回收，**只把 `{hash, width, height}` 回给宿主**。
 
 宿主只保存哈希与时间，**从不保存像素**；用途只有一个：判断"屏幕最近变过 = 人在"。
 这样远程桌面/虚拟输入环境下 `GetLastInputInfo` 不重置时，也不会把正在看视频的人误判成待机。

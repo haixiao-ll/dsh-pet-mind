@@ -34,3 +34,6 @@ npm-debug.log*
 lib/
 .cache/
 coverage/
+
+# 演示/临时运行目录（隔离 DSH_HOME，含 Electron 缓存，绝不入库）
+.demo-home/

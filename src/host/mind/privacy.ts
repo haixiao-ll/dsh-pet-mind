@@ -185,6 +185,11 @@ export function cloudAllowed(app: string | undefined, cfg: PrivacyConfig = {}): 
 export function isSelfWindow(app: string | undefined, title: string | undefined): boolean {
   const name = normalizeApp(app);
   const text = String(title ?? '');
-  if (/dsh-pet|桌宠/i.test(text)) return true;
-  return name === 'electron' && /deepseek harness/i.test(text);
+  // **只认桌面 Helper 自己的窗口**：进程是 electron，且标题是它写死的那句
+  //（"dsh-pet 桌宠（桌面模式）"）。
+  //
+  // 不能用"标题里出现 dsh-pet / 桌宠"当判据——实跑踩到的坑：DSH 主窗口的标题会带**会话名**，
+  // 用户这次会话名里就有"桌宠"，于是整个 DSH 窗口被误判成宠物自己的窗口 →
+  // capture 永远 false → 建议永远不发。
+  return name === 'electron' && /dsh-pet\s*桌宠/i.test(text);
 }
