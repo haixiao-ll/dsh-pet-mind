@@ -166,6 +166,9 @@ class PetSprite {
     // 占用锁（issue #122 第 4 项）：frozen = 本宠物此刻正被第三方占用（与浏览器 PetCard.frozenRef 同义）。
     // lockTimer = 按叶子里的 expiresAt 自己到点解除（宿主侧过期是懒判的，不会推"锁没了"）。
     this.frozen = false;
+    // 心智层待机（0.5）：人不在时随机链只播 idle。与 frozen 刻意分开——
+    // 冻结是"定住等指令"，待机是"安静地活着"（继续播 idle 呼吸）。
+    this.standby = false;
     this.lockTimer = null;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
@@ -208,6 +211,18 @@ class PetSprite {
     this.hit.style.height = ((S.HIT_BOX.y1 - S.HIT_BOX.y0) / 360) * 100 + '%';
     // 原先这里挂 title（原生系统提示）：已换成自绘浮层，但无障碍名称不能跟着丢
     this.hit.setAttribute('aria-label', this.pet.name);
+    // 心智层：上下文进度环（与浏览器端同一视觉；纯展示，不参与点击穿透）
+    this.ring = document.createElement('div');
+    this.ring.className = 'pet-mind-ring';
+    this.ring.style.display = 'none';
+    this.ringDial = document.createElement('div');
+    this.ringDial.className = 'pet-mind-ring__dial';
+    const ringHole = document.createElement('div');
+    ringHole.className = 'pet-mind-ring__hole';
+    this.ringText = document.createElement('span');
+    this.ringText.className = 'pet-mind-ring__text';
+    this.ring.append(this.ringDial, ringHole, this.ringText);
+    stage.append(this.ring);
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
     // 气泡可点时点一下有落点，两种意图分派（内容与显隐仍全部归 renderBubble，这里只吞事件 + 转交）：
@@ -688,6 +703,39 @@ class PetSprite {
     );
   }
 
+  /**
+   * 心智层：上下文进度环 + 待机（由 events.js 把 S 的 sections.mind 灌进来）。
+   * percent 缺失（宿主没上报 contextWindow）时隐藏环——不拿 0 假装"完全空闲"。
+   */
+  setMind(mind) {
+    const data = mind || {};
+    this.standby = data.standby === true;
+    if (this.ring) this.ring.classList.toggle('is-standby', this.standby);
+    const pct =
+      typeof data.percent === 'number' && Number.isFinite(data.percent)
+        ? Math.max(0, Math.min(1, data.percent))
+        : null;
+    if (!this.ring) return;
+    if (pct === null) {
+      this.ring.style.display = 'none';
+      return;
+    }
+    const color = pct >= 0.95 ? '#f87171' : pct >= 0.8 ? '#fbbf24' : '#4ade80';
+    this.ring.style.display = 'flex';
+    this.ringDial.style.background =
+      'conic-gradient(' + color + ' ' + pct * 360 + 'deg, rgba(255,255,255,.14) 0)';
+    this.ringText.textContent = Math.round(pct * 100) + '%';
+    const win = Number(data.contextWindow);
+    const used = Number(data.usedTokens);
+    this.ring.title =
+      '上下文已用 ' +
+      Math.round(pct * 100) +
+      '%' +
+      (win > 0 && used >= 0
+        ? '（' + Math.round(used / 1000) + 'k / ' + Math.round(win / 1000) + 'k tokens）'
+        : '');
+  }
+
   // 动画链（与浏览器 pickNext 语义一致，纯逻辑在 shared）
   playIdle() {
     // 占用锁（issue #122 第 4 项）：锁生效时**不掷骰**。这里是随机链的**唯一**入口（只有动画播完
@@ -695,6 +743,13 @@ class PetSprite {
     // 等持锁者的下一条指令（那走 /anim，不经这里）。与浏览器 pickNext 同一处判断。
     if (this.frozen) return;
     this.stopMove();
+    // 待机（心智层判定"人不在"）：不掷骰，只播 idle 呼吸；播完 handleEnded 会再回到这里，
+    // 形成待机循环。与浏览器 src/client/pet.ts 的 pickNext 同一处判断、同一语义。
+    if (this.standby) {
+      const idle = S.pick(this.animations.idle, this.anim);
+      if (idle) this.playOnce(idle);
+      return;
+    }
     const { animations, animationWeights } = { animations: this.animations, animationWeights: this.weights };
     const roll = Math.random();
     // 宠物固定（pets[].fixedEnabled）：掷骰时把「转向 / 移动」两档权重按 0 算（与浏览器同一份

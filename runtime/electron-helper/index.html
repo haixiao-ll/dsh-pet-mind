@@ -62,6 +62,43 @@
       .pet-hit.dragging {
         cursor: grabbing;
       }
+      /* 心智层：上下文进度环（与浏览器端同一视觉）。纯展示，pointer-events:none，
+         不参与命中区计算，也不会让透明窗变成可点击区。 */
+      .pet-mind-ring {
+        position: absolute;
+        top: 4%;
+        right: 4%;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 3;
+        background: rgba(15, 23, 42, 0.55);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      .pet-mind-ring.is-standby {
+        opacity: 0.55;
+      }
+      .pet-mind-ring__dial {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+      }
+      .pet-mind-ring__hole {
+        position: absolute;
+        inset: 3px;
+        border-radius: 50%;
+        background: rgba(15, 23, 42, 0.9);
+      }
+      .pet-mind-ring__text {
+        position: relative;
+        font: 600 10px/1 system-ui, sans-serif;
+        color: #e5e7eb;
+      }
       /* 余额气泡：与浏览器 overlay 同一套视觉（白色圆润泡 + 峰/谷/错误着色）。
          尺寸分两类锚点：盒子（宽度/内边距/圆角/尾巴/阴影/行间距）锚在字号 --f 上——字号调大盒子同步变大，
          文字不会顶出白底；位置（bottom 偏移）仍锚在宠物宽度 var(--pet-size)，气泡始终贴着宠物头顶。

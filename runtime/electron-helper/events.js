@@ -336,6 +336,21 @@ function applyWorkStatusLeaf(leaf) {
   for (const s of sprites) s.onWorkTick(snap, workTick);
 }
 
+/** 心智层叶子 → 进度环 + 待机（0.5）。形状见 host/src/host/mind 的 publishNow()：
+ *  { enabled, standby, context: { percent, usedTokens, contextWindow, model } }
+ *  只影响"画什么/掷不掷骰"，不碰任何宠物状态机。 */
+function applyMindLeaf(leaf) {
+  const data = leaf && leaf.data && typeof leaf.data === 'object' ? leaf.data : {};
+  const ctx = data.context && typeof data.context === 'object' ? data.context : {};
+  const mind = {
+    standby: data.standby === true,
+    percent: typeof ctx.percent === 'number' ? ctx.percent : undefined,
+    usedTokens: typeof ctx.usedTokens === 'number' ? ctx.usedTokens : undefined,
+    contextWindow: typeof ctx.contextWindow === 'number' ? ctx.contextWindow : undefined,
+  };
+  for (const s of sprites) s.setMind(mind);
+}
+
 /** 点播动画叶子 → 对应宠物播该动画（其他插件经 POST /anim 写进 S）。
  *  两种形态（issue #122 第 1 条）：
  *    name = 池内名字，复用**右键菜单同一个处理函数** onMenuAction，所以镜像修正 / 移动类走真实
@@ -414,6 +429,8 @@ async function pollStateOnce() {
       stateBaseline = S.flattenCounters(s); // 首拉：只记基线，不渲染（避免启动/重载时重放旧气泡）
       // 第三方菜单项是**当前状态**不是事件：首拉就要装上，否则 helper 重启后要等下次注册才出现
       applyMenuLeaf(s.sections ? s.sections.menu : null);
+      // 心智状态是**状态**不是事件：首拉也要装上，否则 helper 重启后要等下一次广播才有环。
+      applyMindLeaf(s.sections ? s.sections.mind : null);
       return true;
     }
     for (const change of S.takeChanged(s, stateBaseline)) {
@@ -421,6 +438,7 @@ async function pollStateOnce() {
       if (change.path === 'sections.balance') applyBalanceLeaf(change.leaf);
       else if (change.path === 'sections.workStatus') applyWorkStatusLeaf(change.leaf);
       else if (change.path === 'sections.menu') applyMenuLeaf(change.leaf);
+      else if (change.path === 'sections.mind') applyMindLeaf(change.leaf);
       else if (change.path.startsWith('pets.') && change.path.endsWith('.say')) {
         // 宠物 id **允许含点号**：按前缀/后缀切片，绝不 split('.')
         applySayLeaf(change.path.slice('pets.'.length, -'.say'.length), change.leaf);

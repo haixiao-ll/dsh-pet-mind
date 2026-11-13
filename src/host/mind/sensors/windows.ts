@@ -34,9 +34,24 @@ export interface WatcherOptions {
   log?(message: string): void;
 }
 
-/** 脚本路径：脚本随包发布，位于 <包根>/scripts/mind/foreground-watch.ps1 */
+/**
+ * 脚本路径：脚本随包发布，位于 `<包根>/scripts/mind/foreground-watch.ps1`。
+ *
+ * 两种运行形态的相对深度不同，所以按候选路径探测：
+ *   - 构建产物 `lib/index.js` → `../scripts/mind/...`；
+ *   - 源码直跑（node --experimental-strip-types / 单测）`src/host/mind/sensors/windows.ts`
+ *     → 上四层才是包根。
+ * 都找不到时返回产物形态那条（调用方 existsSync 失败会优雅降级，不会崩）。
+ */
 export function watcherScriptPath(): string {
-  return fileURLToPath(new URL('../../../scripts/mind/foreground-watch.ps1', import.meta.url));
+  const candidates = [
+    fileURLToPath(new URL('../scripts/mind/foreground-watch.ps1', import.meta.url)),
+    fileURLToPath(new URL('../../../../scripts/mind/foreground-watch.ps1', import.meta.url)),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
 }
 
 /**

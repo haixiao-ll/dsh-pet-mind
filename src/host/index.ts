@@ -1031,6 +1031,9 @@ export function apply(ctx: any): void {
       state.writePet(petId, 'say', { text });
     },
     log: (message: string) => console.log('[dsh-pet] ' + message),
+    // 心智状态广播：写 S 的 sections.mind（浏览器画进度环、桌面 Helper 切待机都读它）。
+    // 只写这一条叶子，不碰 pets.*——宠物本体的状态机完全不受心智层影响。
+    publish: (view) => state.writeSection('mind', view),
     // 可选的模型润色（配置 memory.polishWithModel=true 才走）：把本地抽的骨架交给
     // 聊天模型整理成更通顺的摘要。**失败一律返回 null**，由 Mind 退回本地摘要——
     // 记忆是长期资产，不能因为一次模型调用失败就写一份空文档。
