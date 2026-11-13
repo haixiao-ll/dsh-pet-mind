@@ -45,8 +45,8 @@ contextBridge.exposeInMainWorld('petBridge', {
    * 心智层截帧：主进程在内存里截一张 640×360 缩略图、算完哈希就销毁。
    * 返回 `{ hash, width, height }`——**没有像素**，所以经 bridge 传给宿主也安全。
    */
-  captureThumb() {
-    return ipcRenderer.invoke('pet:capture-thumb');
+  captureThumb(options) {
+    return ipcRenderer.invoke('pet:capture-thumb', options);
   },
   // 忙碌态配合 setInputRegions：拖拽持续捕获，菜单/聊天框外仍可点击其它应用。
   setInputBusy(busy) {

@@ -343,16 +343,23 @@ let lastCaptureId = '';
  * 截帧请求 → 让主进程截一张（内存里）→ 只把哈希回给宿主。
  * 任何失败都静默：截帧只是"人在"的辅助证据，不能影响桌宠本体。
  */
-async function captureAndReport(id) {
+async function captureAndReport(id, withImage) {
   try {
     const bridge = window.petBridge;
     if (!bridge || typeof bridge.captureThumb !== 'function') return;
-    const frame = await bridge.captureThumb();
+    const frame = await bridge.captureThumb({ withImage: withImage === true });
     if (!frame || typeof frame.hash !== 'string' || frame.hash === '') return;
     await fetch(BASE + '/mind/frame', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, hash: frame.hash, width: frame.width, height: frame.height }),
+      // dataUrl 只有视觉模式才有；不要把它写进日志（体积大且是画面内容）
+      body: JSON.stringify({
+        id,
+        hash: frame.hash,
+        width: frame.width,
+        height: frame.height,
+        ...(typeof frame.dataUrl === 'string' ? { dataUrl: frame.dataUrl } : {}),
+      }),
     }).catch(() => {});
   } catch {
     /* 静默降级 */
@@ -376,7 +383,7 @@ function applyMindLeaf(leaf) {
   const capture = data.capture && typeof data.capture === 'object' ? data.capture : null;
   if (capture && typeof capture.id === 'string' && capture.id !== '' && capture.id !== lastCaptureId) {
     lastCaptureId = capture.id;
-    void captureAndReport(capture.id);
+    void captureAndReport(capture.id, capture.image === true);
   }
 }
 

@@ -81,9 +81,11 @@ test('桌面 Helper 有截帧 IPC，且只回哈希（源码守卫）', () => {
   assert.ok(/thumbnailSize/.test(body), '必须限制缩略图尺寸（640×360）');
 
   const preload = helper('preload.js');
-  assert.ok(/captureThumb\(\)/.test(preload), 'preload 必须暴露 captureThumb');
+  assert.ok(/captureThumb\(options\)/.test(preload), 'preload 必须暴露 captureThumb(options)');
 
   const events = helper('events.js');
   assert.ok(/\/mind\/frame/.test(events), 'events.js 必须把哈希回传宿主');
-  assert.ok(!/dataUrl|toDataURL/.test(events), '回传的只能是哈希，不能是图片数据');
+  // 视觉模式才带图：必须由 capture.image===true 显式触发，默认路径仍只回哈希
+  assert.ok(/capture\.image === true/.test(events), '只有视觉模式才能请求带图');
+  assert.ok(/dataUrl: frame\.dataUrl/.test(events), '带图时把 dataUrl 回传（仅内存）');
 });

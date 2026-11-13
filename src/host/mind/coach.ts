@@ -16,11 +16,15 @@ import type { ActivitySample, Suggestion } from './types';
 
 /** 建议策略配置 */
 export interface CoachConfig {
-  /** 在同一界面停留多少分钟才建议（默认 3，用户可调 3–5） */
+  /** 在同一界面停留多少秒才建议（优先级高于 dwellMinutes；默认 30） */
+  dwellSec?: number;
+  /** 停留多少分钟才建议（旧字段；没写 dwellSec 时才用它，默认 3） */
   dwellMinutes?: number;
   /** 空闲多少分钟算"人不在"（默认 5） */
   idleMinutes?: number;
-  /** 同一应用的冷却（分钟，默认 30） */
+  /** 同一应用的冷却（秒；优先级高于 cooldownMinutes；默认 30） */
+  cooldownSec?: number;
+  /** 同一应用的冷却（分钟，默认 30；没写 cooldownSec 时才用它） */
   cooldownMinutes?: number;
   /** 每天最多几条（默认 8） */
   dailyLimit?: number;
@@ -103,50 +107,70 @@ export class Coach {
     return start > end ? h >= start || h < end : h >= start && h < end;
   }
 
-  /** 每 5 秒一条采样就调一次；返回建议（没有就 null） */
-  evaluate(sample: ActivitySample, canCapture: boolean, cfg: CoachConfig = {}): Suggestion | null {
+  /** 停留阈值（ms）：dwellSec 优先，其次 dwellMinutes，默认 30 秒 */
+  private dwellMs(cfg: CoachConfig): number {
+    if (Number.isFinite(Number(cfg.dwellSec))) return Math.max(5, Number(cfg.dwellSec)) * 1000;
+    return Math.max(0.1, Number(cfg.dwellMinutes ?? 3)) * 60_000;
+  }
+
+  /** 冷却（ms）：cooldownSec 优先，其次 cooldownMinutes，默认 30 秒 */
+  private cooldownMs(cfg: CoachConfig): number {
+    if (Number.isFinite(Number(cfg.cooldownSec))) return Math.max(0, Number(cfg.cooldownSec)) * 1000;
+    return Math.max(0, Number(cfg.cooldownMinutes ?? 30)) * 60_000;
+  }
+
+  /**
+   * 现在"该不该打扰一次"：停留够久 + 不在免打扰 + 冷却过了 + 今天没超量。
+   *
+   * **调用即记账**（记冷却、加当日计数、重置停留起点）——所以本地文案模式与
+   * 模型模式共用它，但一次采样只能走其中一条路，否则会重复计数。
+   */
+  due(sample: ActivitySample, canCapture: boolean, cfg: CoachConfig = {}): boolean {
     const now = this.now();
     const app = sample.app ?? '';
     const key = app || 'unknown';
 
-    // 人不在 / 隐私被拦：清空停留计时，不发建议。恢复采集后从下一分钟重新算
+    // 人不在 / 隐私被拦：清空停留计时。恢复采集后重新开始算
     if (!canCapture || this.isStandby(sample, cfg)) {
       this.dwellKey = '';
       this.dwellSince = 0;
-      return null;
+      return false;
     }
 
     // 换应用 = 换一次"停留"，重新计时
     if (key !== this.dwellKey) {
       this.dwellKey = key;
       this.dwellSince = now;
-      return null;
+      return false;
     }
 
-    const dwellMs = (cfg.dwellMinutes ?? 3) * 60_000;
-    if (now - this.dwellSince < dwellMs) return null;
-    if (this.isQuietHour(now, cfg)) return null;
+    if (now - this.dwellSince < this.dwellMs(cfg)) return false;
+    if (this.isQuietHour(now, cfg)) return false;
 
-    // 冷却：同一应用冷却期内不再说
-    const cooldownMs = (cfg.cooldownMinutes ?? 30) * 60_000;
     const last = this.lastByApp.get(key) ?? 0;
-    if (now - last < cooldownMs) return null;
+    if (now - last < this.cooldownMs(cfg)) return false;
 
-    // 每日上限（本地日期切换时清零）
     const day = new Date(now).toDateString();
     if (day !== this.dayKey) {
       this.dayKey = day;
       this.dayCount = 0;
     }
-    if (this.dayCount >= (cfg.dailyLimit ?? 8)) return null;
+    if (this.dayCount >= (cfg.dailyLimit ?? 8)) return false;
 
-    const texts = TEMPLATES[categoryOf(app)];
-    const text = texts[Math.floor(this.random() * texts.length) % texts.length];
     this.lastByApp.set(key, now);
     this.dayCount += 1;
-    // 建议过一次后重新计时：用户可能继续停 3 分钟，但冷却会挡住；换应用才重新开始
     this.dwellSince = now;
-    return { key, text, reason: 'dwell', at: now };
+    return true;
+  }
+
+  /** 每 5 秒一条采样就调一次；返回建议（没有就 null）。本地文案模式走这里 */
+  evaluate(sample: ActivitySample, canCapture: boolean, cfg: CoachConfig = {}): Suggestion | null {
+    if (!this.due(sample, canCapture, cfg)) return null;
+    const app = sample.app ?? '';
+    const key = app || 'unknown';
+    const texts = TEMPLATES[categoryOf(app)];
+    const text = texts[Math.floor(this.random() * texts.length) % texts.length];
+    return { key, text, reason: 'dwell', at: this.now() };
   }
 
   /** 测试/诊断：今天已经说了几条 */

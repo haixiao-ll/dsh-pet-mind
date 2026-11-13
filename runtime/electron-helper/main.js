@@ -803,7 +803,7 @@ app.whenReady().then(() => {
   // 心智层截帧（0.5）：**只在内存里截一张缩略图、算个采样哈希就销毁**。
   // 不落盘、不进附件库、不发网络；哈希回给宿主做「屏幕最近变过 = 人在」的证据。
   // 宿主只在 mind.vision.enabled=true 且隐私闸门放行时才发起请求（见 host/mind/vision.ts）。
-  ipcMain.handle('pet:capture-thumb', async () => {
+  ipcMain.handle('pet:capture-thumb', async (_event, options) => {
     try {
       if (!desktopCapturer) return null;
       const sources = await desktopCapturer.getSources({
@@ -857,7 +857,11 @@ app.whenReady().then(() => {
         hash ^= bmp[i];
         hash = Math.imul(hash, 16777619);
       }
-      return { hash: (hash >>> 0).toString(16), width: size.width, height: size.height };
+      // 只有"视觉建议"模式才把图带回去：JPEG q60，640×360，约几十 KB。
+      // 这条数据只在内存里（buffer → base64 → bridge → 宿主的 fetch → 模型），不落盘。
+      const withImage = !!(options && options.withImage === true);
+      const dataUrl = withImage ? 'data:image/jpeg;base64,' + image.toJPEG(60).toString('base64') : undefined;
+      return { hash: (hash >>> 0).toString(16), width: size.width, height: size.height, ...(dataUrl ? { dataUrl } : {}) };
     } catch (error) {
       // 截帧失败只影响"活动证据"，绝不能让桌宠本体崩
       console.warn('[dsh-pet] capture-thumb failed:', error && error.message ? error.message : error);

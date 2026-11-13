@@ -137,9 +137,9 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 
 ### 4.3 建议规则（`coach.ts`）
 
-- 同一应用停留 ≥ `dwellMinutes`（默认 3）→ 建议一次；
+- 同一应用停留 ≥ `dwellSec`（默认 30 秒；旧的 `dwellMinutes` 仍兼容）→ 建议一次；
 - **同一次停留只建议一次**；换应用才重新计时；
-- 同应用冷却 `cooldownMinutes`（默认 30）；每天上限 `dailyLimit`（默认 8）；
+- 同应用冷却 `cooldownSec`（默认 30 秒）；每天上限 `dailyLimit`（默认 120）；
 - 空闲 ≥ `idleMinutes`（默认 5）→ 视为"人不在"：**不发任何消息**，宠物转**待机**——
   随机动作链停掷骰、只播 idle 呼吸（看起来是安静地待着，不是定住），碎碎念也一起静音；
   采集继续，但不再产生建议。用户回来（有输入）后自动恢复；
@@ -173,7 +173,40 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 - 帧不落盘、不进 DSH 的附件库（`ImageAttachmentRef` 会持久化，所以**刻意不走模型图片通道**）；
 - 请求带一次性 id + 10s TTL，迟到的帧直接丢弃。
 
-### 4.6 诚实的限制
+### 4.6 视觉建议（`mode: "model"`）—— 让模型看着画面说
+
+`local` 模式只算哈希；`model` 模式在**停留满 `dwellSec`（默认 30 秒）**时截一帧发给视觉模型，
+气泡里的字来自模型，而不是本地模板。
+
+```jsonc
+"mind": {
+  "coach": { "dwellSec": 30, "cooldownSec": 30, "dailyLimit": 120 },
+  "vision": {
+    "enabled": true,
+    "mode": "model",
+    "analyze": {
+      "enabled": true,
+      "endpoint": "https://api.openai.com/v1/chat/completions", // OpenAI 兼容
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY",   // 密钥只从环境变量读，别写进配置文件
+      "allApps": false                  // false = 只发 cloudAllowlist 里的应用
+    }
+  }
+}
+```
+
+要点：
+
+- **帧会离开本机**（只到你配的端点），所以默认关闭；`allApps:false` 时还必须把应用写进
+  `privacy.cloudAllowlist`。敏感应用（微信/支付/网银/密码管理器/远程桌面）在出帧前就被拦掉；
+- 帧是 640×360 JPEG（约 20–40KB），只在内存里：Helper 截图 → base64 → bridge → 宿主 fetch → 模型，
+  **不落盘、不进 DSH 附件库**（DSH 的图片消息会持久化附件，所以刻意不用 `ctx.llm` 的图片通道）；
+- 模型回 `SKIP`（看到私密内容）时**不弹气泡**；端点超时/报错也只记日志，**不会退回本地模板**——
+  你要的是"模型说的"，糊弄一句预设文案不如不说；
+- 密钥不写配置：用 `apiKeyEnv` 指定环境变量名（默认 `OPENAI_API_KEY`），DSH 进程里要有这个变量；
+- 视觉模型要和文本模型分开配：DSH 常用的 DeepSeek-Chat 是纯文本，需要单独指一个多模态端点。
+
+### 4.7 诚实的限制
 
 - **密码框无法从外部可靠识别**：只能靠应用名单 + 窗口标题 + 手动暂停，这是"三道保险"而不是绝对；
 - **提权窗口读不到标题**（UIPI）：所以默认拒绝；
@@ -202,12 +235,15 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
   "context": { "thresholds": [0.8, 0.95], "notify": true },
   "memory":  { "autoSummary": true, "injectSystemPrompt": true, "maxInjectChars": 1600,
                "polishWithModel": false },
-  "coach":   { "enabled": true, "dwellMinutes": 3, "idleMinutes": 5,
-               "cooldownMinutes": 30, "dailyLimit": 8, "quietHours": [23, 8] },
+  "coach":   { "enabled": true, "dwellSec": 30, "cooldownSec": 30, "idleMinutes": 5,
+               "dailyLimit": 120, "quietHours": [23, 8] },
   "privacy": { "paused": false, "apps": [], "titlePatterns": [],
                "cloudAllowlist": [], "unknownIsSensitive": true },
   "sensor":  { "enabled": true, "intervalMs": 5000 },
-  "vision":  { "enabled": false, "intervalMs": 30000, "changeWindowMs": 120000 }
+  "vision":  { "enabled": false, "mode": "local", "intervalMs": 30000, "changeWindowMs": 120000,
+               "analyze": { "enabled": false, "endpoint": "", "model": "",
+                            "apiKeyEnv": "OPENAI_API_KEY", "allApps": false } },
+  // mode="model" 且 analyze.enabled=true 时：每 dwellSec（30s）发一帧给视觉端点，文案来自模型
 }
 ```
 

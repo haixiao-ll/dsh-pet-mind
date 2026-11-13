@@ -1125,16 +1125,20 @@ export function apply(ctx: any): void {
     // 桌面 Helper 回传的一帧摘要（**没有像素**）：只校验 id/形状，更新"屏幕最近变过"的证据。
     // 帧本身在 Helper 内存里算完哈希就销毁，宿主从头到尾没见过图像。
     if (method === 'POST' && sub === 'frame') {
-      if (typeof body !== 'string' || body.length === 0 || body.length > 4000) {
+      // 视觉建议模式会带一帧 JPEG（640×360，几十 KB base64）；上限 1.6MB 足够且能挡住滥用。
+      // 只认 jpeg data URL：png/其它格式一律丢弃，别让这条路变成任意文件上传。
+      if (typeof body !== 'string' || body.length === 0 || body.length > 1_600_000) {
         return { kind: 'json', status: 200, obj: { ok: false, reason: 'bad-body' } };
       }
       try {
         const raw = JSON.parse(body) as Record<string, unknown>;
+        const dataUrl = typeof raw.dataUrl === 'string' && raw.dataUrl.startsWith('data:image/jpeg;base64,') ? raw.dataUrl : undefined;
         const result = mind.onFrame({
           id: String(raw.id ?? ''),
           hash: String(raw.hash ?? ''),
           width: Number(raw.width) || 0,
           height: Number(raw.height) || 0,
+          ...(dataUrl ? { dataUrl } : {}),
         });
         return {
           kind: 'json',

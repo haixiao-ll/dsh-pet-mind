@@ -155,7 +155,8 @@ const walk = (dir) => {
     const p = join(dir, entry.name);
     if (entry.isDirectory()) {
       // 跳过不会进 npm 包的目录
-      if (!['node_modules', '.git', 'scripts', 'step01', 'step02', 'step03', 'preview'].includes(entry.name)) walk(p);
+      // 跳过点号开头的临时/演示目录（.git/.demo-home/.cache…）与上游素材中间目录
+      if (!entry.name.startsWith('.') && !['node_modules', 'scripts', 'step01', 'step02', 'step03', 'preview'].includes(entry.name)) walk(p);
     } else if (!entry.name.endsWith('.map')) {
       // 打包产物 tarball（npm pack 遗留）不计入自查口径
       if (!entry.name.endsWith('.tgz')) total += statSync(p).size; // sourcemap 不计

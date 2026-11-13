@@ -100,3 +100,14 @@ test('上下文提醒文案按档位区分', () => {
   assert.match(contextWarningText(0.8, 0.81), /81%/);
   assert.match(contextWarningText(0.95, 0.96), /不到 5%/);
 });
+
+test('dwellSec / cooldownSec：30 秒即可建议一次，冷却也按秒', () => {
+  const h = harness({ dwellSec: 30, cooldownSec: 30 });
+  h.tick();
+  h.adv(29_000);
+  assert.equal(h.tick(), null);
+  h.adv(2_000);
+  assert.ok(h.tick(), '满 30 秒应建议');
+  h.adv(31_000);
+  assert.ok(h.tick(), '冷却 30 秒后可以再一次');
+});

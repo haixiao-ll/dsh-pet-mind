@@ -156,7 +156,7 @@ if (!existsSync(cfgPath)) {
 }
 
 // ---- 5. 本机路径 / 令牌泄漏 ----
-const SKIP_DIRS = new Set(['node_modules', '.git', 'lib', 'coverage', '.cache']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'lib', 'coverage', '.cache', '.demo-home']);
 const TEXT_EXT = /\.(ts|tsx|js|mjs|cjs|json|jsonc|md|yml|yaml|ps1|html|css|txt)$/i;
 const SECRETS = [
   { re: /[A-Za-z]:\\Users\\/i, why: 'Windows 本机用户目录', codeOnly: true },

@@ -29,6 +29,8 @@ export interface FrameSignal {
   /** 缩略图尺寸（诊断用） */
   width: number;
   height: number;
+  /** 仅"视觉建议"模式才带：data:image/jpeg;base64,...（宿主只在内存里转发给模型，不落盘） */
+  dataUrl?: string;
 }
 
 /** 闸门判定结果 */

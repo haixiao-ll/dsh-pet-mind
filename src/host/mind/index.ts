@@ -23,9 +23,10 @@
 import { ContextMeter, ThresholdLatch, sessionIdOf, type SessionLike } from './context-meter';
 import { Coach, contextWarningText, type CoachConfig } from './coach';
 import { MemoryStore, summarizeLocally, type ChatLine, type WorkSummary } from './memory';
-import { checkPrivacy, isSelfWindow, type PrivacyConfig } from './privacy';
+import { checkPrivacy, cloudAllowed, isSelfWindow, type PrivacyConfig } from './privacy';
 import { startWindowsActivityWatcher, type ActivityWatcher } from './sensors/windows';
 import { FrameGate, type FrameAccept, type FrameSignal } from './vision';
+import { analyzeScreen, type VisionAnalyzeConfig } from './vision-model';
 import type { ActivitySample, ContextSnapshot, Suggestion } from './types';
 
 /** 用户可在 config.jsonc 的 `mind` 段里改的全部开关（全部有安全默认值） */
@@ -59,10 +60,17 @@ export interface MindConfig {
   vision?: {
     /** 截帧（默认 **false**：像素相关的能力必须由用户显式打开） */
     enabled?: boolean;
+    /**
+     * 'local'（默认）= 只算哈希，判断"屏幕变过 = 人在"；
+     * 'model' = 到点让视觉模型看一帧并给一句内容相关的建议（帧会发给你配置的端点）。
+     */
+    mode?: 'local' | 'model';
     /** 截帧间隔（ms，默认 30000；最小 15000） */
     intervalMs?: number;
     /** "屏幕最近变过"的时间窗（ms，默认 120000）：窗内变过视为人在，不待机 */
     changeWindowMs?: number;
+    /** 视觉建议的端点/模型配置（mode=model 时必填；密钥走环境变量） */
+    analyze?: VisionAnalyzeConfig;
   };
 }
 
@@ -127,6 +135,10 @@ export class Mind {
   /** 本次进程收到过多少帧（只用于"第一帧"提示，不落盘） */
   private frameCount = 0;
   private captureTimer: ReturnType<typeof setInterval> | null = null;
+  /** 这次截帧是不是为了"视觉建议"（要带 dataUrl），而不是只算哈希 */
+  private pendingVision = false;
+  /** 同一时刻只允许一次视觉分析在路上（30 秒节奏已经够密，别叠请求） */
+  private analyzing = false;
   private framePaused = false;
   private started = false;
 
@@ -147,7 +159,9 @@ export class Mind {
     // 截帧是独立开关：即使关掉活跃度采集，用户也可能只想用「屏幕变化」做活动证据。
     // 默认关闭——像素相关能力必须由用户显式打开（见 assets/config.jsonc 的 vision 段）。
     const vision = cfg.vision ?? {};
-    if (vision.enabled === true) {
+    // mode=model 时不跑固定截帧定时器：截帧由"停留到期"驱动（见 onSample），
+    // 避免每 30 秒既截哈希帧又截视觉帧、同一时刻两个 pending 抢闸门。
+    if (vision.enabled === true && vision.mode !== 'model') {
       const interval = Math.max(15_000, vision.intervalMs ?? 30_000);
       this.captureTimer = setInterval(() => this.requestCapture(), interval);
       this.requestCapture(); // 立刻来一帧，别等 30 秒
@@ -279,6 +293,13 @@ export class Mind {
     if (this.standby) return;
     if (coachCfg.enabled === false) return;
 
+    // 视觉建议模式：到点截一帧，交给模型"看着画面说"——文案不来自本地模板。
+    // 本地模式（默认）仍走下面那套零成本文案。
+    if (cfg.vision?.enabled === true && cfg.vision.mode === 'model') {
+      if (this.coach.due(sample, decision.capture, coachCfg)) this.requestCapture(true);
+      return;
+    }
+
     const suggestion = this.coach.evaluate(sample, decision.capture, coachCfg);
     if (!suggestion) return;
     this.lastSuggestion = suggestion;
@@ -303,8 +324,9 @@ export class Mind {
         enabled: this.deps.getConfig().enabled !== false,
         standby: this.standby,
         context: this.meter.latest() ?? null,
-        // 带一次性截帧请求：桌面 Helper 看到 id 变了就截一帧并回传哈希（像素不出 Helper）
-        ...(captureId ? { capture: { id: captureId } } : {}),
+        // 带一次性截帧请求：Helper 看到 id 变了就截一帧。
+        // image=true 时才把 JPEG 一起回传（视觉建议模式）；否则只回哈希。
+        ...(captureId ? { capture: { id: captureId, image: this.pendingVision } } : {}),
       };
       const sig = JSON.stringify(view);
       if (sig === this.lastPublished) return;
@@ -419,7 +441,7 @@ export class Mind {
    * 请求 Helper 截一帧（只在内存里算哈希）。
    * 默认关闭；隐私闸门拦住（敏感应用/暂停/识别不出）时不请求。
    */
-  requestCapture(): void {
+  requestCapture(withImage = false): void {
     const cfg = this.deps.getConfig();
     if (cfg.enabled === false || cfg.vision?.enabled !== true) return;
     if (this.framePaused || cfg.privacy?.paused === true) return;
@@ -429,13 +451,22 @@ export class Mind {
       { ...(cfg.privacy ?? {}), paused: false },
     );
     if (!decision.capture) return;
+    if (withImage && cfg.vision?.mode !== 'model') return; // 只有视觉模式才带图
+    this.pendingVision = withImage;
     this.frameGate.request(Date.now());
     this.publishNow();
   }
 
-  /** Helper 回传的一帧摘要：校验 id/TTL，更新"最近变化"证据 */
+  /** Helper 回传的一帧摘要：校验 id/TTL，更新"最近变化"证据；带图时顺手交给模型 */
   onFrame(signal: FrameSignal): FrameAccept {
     const result = this.frameGate.accept(signal);
+    const wantsImage = this.pendingVision;
+    this.pendingVision = false;
+    if (result.ok && wantsImage && typeof signal.dataUrl === 'string' && signal.dataUrl !== '') {
+      void this.analyzeFrame(signal.dataUrl).catch((error: unknown) => {
+        this.deps.log(`视觉建议失败：${(error as Error).message}`);
+      });
+    }
     if (result.ok && this.frameCount === 0) {
       // 只在第一帧说一次：这是用户确认"截帧链路真的通了"的最快信号（日志里只有哈希与尺寸）
       this.frameCount += 1;
@@ -449,6 +480,40 @@ export class Mind {
       this.publishNow();
     }
     return result;
+  }
+
+  /**
+   * 把一帧交给视觉模型，换一句"看着画面说"的建议。
+   *
+   * 出帧前的最后一道闸：
+   *   - 隐私名单仍是硬约束（调用方已经判过一次，这里再确认应用未被标记）；
+   *   - `analyze.allApps !== true` 时，只允许 `privacy.cloudAllowlist` 里的应用——
+   *     这是"画面可能离开本机"的显式开关；
+   *   - 同一时刻只跑一次，失败只记日志（不退化成本地文案糊弄用户）。
+   */
+  private async analyzeFrame(dataUrl: string): Promise<void> {
+    if (this.analyzing) return;
+    this.analyzing = true;
+    try {
+      const cfg = this.deps.getConfig();
+      const analyze = cfg.vision?.analyze ?? {};
+      if (analyze.enabled !== true) return;
+      const app = this.lastSample?.app;
+      if (analyze.allApps !== true && !cloudAllowed(app, cfg.privacy ?? {})) {
+        this.deps.log('视觉建议：应用不在 cloudAllowlist，画面未出本机');
+        return;
+      }
+      const result = await analyzeScreen({ imageDataUrl: dataUrl, app }, analyze);
+      if (!result.ok) {
+        this.deps.log(`视觉建议未生成：${result.reason}${result.detail ? '（' + result.detail + '）' : ''}`);
+        return;
+      }
+      this.lastSuggestion = { key: app ?? 'unknown', text: result.text, reason: 'dwell', at: Date.now() };
+      this.deps.say(result.text);
+      this.deps.log('建议已发送：vision');
+    } finally {
+      this.analyzing = false;
+    }
   }
 
   /** 测试/诊断：最近一次收到有效帧的时间（0 = 还没有） */
