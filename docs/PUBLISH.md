@@ -28,22 +28,17 @@ MIT 明确允许修改、发布、商用。**唯一义务**：
 | `src/client/index.ts` | `__ModuleLoader__.load({ id })` | DSH 用 id 查 factory，不一致会报 `loaded without registering`，宠物不出现 |
 | `cordis.patch.yml` | `name:` | 解析到本包入口 `lib/index.js` |
 
-一键改（在仓库根目录）：
+一键改（在仓库根目录，脚本会同时改 package.json / 客户端模块 id / cordis 挂载 name / 文档里的安装命令）：
 
 ```sh
-node -e "
-const fs=require('fs');
-const name='@你的ID/dsh-pet-mind';        // ← 改成你的
-const p=JSON.parse(fs.readFileSync('package.json','utf8'));
-p.name=name; fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');
-const f='src/client/index.ts';
-fs.writeFileSync(f, fs.readFileSync(f,'utf8').replace(/id:\s*'[^']+'/, \"id: '\"+name+\"'\"));
-const c='cordis.patch.yml';
-fs.writeFileSync(c, fs.readFileSync(c,'utf8').replace(/^(\s*name:\s*)'[^']+'/m, \"\$1'\"+name+\"'\"));
-console.log('改名完成：',name);
-"
-node tools/verify-package.mjs   # 必须通过：它会检查三处是否一致
+node scripts/rename-fork.mjs   --name "@你的ID/dsh-pet-mind"   --repo "https://github.com/你的ID/dsh-pet-mind"
+
+node tools/verify-package.mjs   # 必须通过：它会检查三处名字是否一致
+npm run bundle                  # 客户端产物里写死了 id，必须重编
+npm test
 ```
+
+想先看会改哪些文件，加 `--dry-run`。脚本**不会**动路由前缀、数据目录与上游版权声明。
 
 > **不要改的东西**：路由前缀 `/dsh-pet-7340`、用户数据目录 `$DSH_HOME/dsh-pet`、
 > `PET_CALL_IDENTITY`。它们不是"名字"，改了会丢掉已有宠物状态与配置，

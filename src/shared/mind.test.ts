@@ -19,7 +19,7 @@ test('readMindState：正常形状能读出上下文与待机', () => {
 });
 
 test('readMindState：宿主返回残缺/垃圾数据时不抛，降级为空视图', () => {
-  assert.deepEqual(readMindState(null), { enabled: false, context: null, standby: false, capture: false, memoryDocs: 0 });
+  assert.deepEqual(readMindState(null), { enabled: false, context: null, standby: false, capture: false, reason: '', memoryDocs: 0 });
   assert.equal(readMindState({ ok: false }).context, null);
   assert.equal(readMindState({ context: 'nope' }).context, null);
   // usedTokens 缺失 → 不造一个 0 出来（0 会被画成"完全空闲"）

@@ -18,6 +18,7 @@ import { NOTIFY_ICONS, reloadNotifications, requestNotificationPermission, wireN
 import type { Corner, FontConfig, FontFamilyId, ModelSelection, Pet, PetDisplay, PhysicsParams } from '../shared/types';
 import type { ChangeEvent, Dispatch, FunctionComponent, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
+import { formatTokens, readMindState, type MindStateView } from '../shared/mind';
 import type { jsx } from 'react/jsx-runtime';
 
 /** 容器与设置页共享的桥（同一 bundle 单例）：
@@ -246,6 +247,26 @@ export const zh = {
   actionSecLabel: '动作间隔（秒）',
   actionSecHint:
     '每个随机动作播完后先播待机、歇这么久，再抽下一个动作。0 = 不歇，动作一播完立刻接下一个（旧行为）。填 20 就是「动一下、歇 20 秒」。',
+  mindTitle: '心智层（上下文 / 记忆 / 桌面感知）',
+  mindHint:
+    '0.5 新增。这里只做「看」和两个动作；阈值、冷却、隐私名单、截帧这些细项在配置文件 mind 段里（assets/config.jsonc 有完整中文注释）。',
+  mindContextLabel: '上下文用量',
+  mindContextHint: '当前会话已用 token 占模型窗口的比例；宠物头顶那个环读的是同一份数据。',
+  mindContextNone: '还没有数据（需要有一次对话上报 usage）',
+  mindMemoryLabel: '记忆文档',
+  mindMemoryHint: 'memory/work（工作）与 memory/companion（陪伴）的索引条数。',
+  mindMemoryUnit: ' 份',
+  mindCaptureLabel: '桌面感知',
+  mindCaptureHint: 'Windows 上读前台应用与空闲时长；敏感应用会停采（名单在配置里）。',
+  mindCaptureRunning: '采集中',
+  mindCapturePaused: '已暂停',
+  mindCaptureStandby: '待机中（人不在）',
+  mindCaptureOff: '未启用 / 不可用',
+  mindSummarize: '立即记一份',
+  mindSummarizeOk: '已写入',
+  mindSummarizeFail: '没记成',
+  mindPause: '暂停采集',
+  mindResume: '恢复采集',
   invalidWhisperSec: '碎碎念间隔必须是 ≥ 60 的秒数。',
   invalidActionSec: '动作间隔必须是 ≥ 0 的数字（0 = 不歇）。',
   whisperDwellLabel: '气泡停留（秒）',
@@ -458,6 +479,26 @@ export const en = {
     'After each random action the pet idles for this long before rolling the next one. 0 = no rest, chain straight to the next action (old behaviour). Set 20 for "act, then chill for 20 s".',
   invalidWhisperSec: 'Whisper interval must be a number of seconds ≥ 60.',
   invalidActionSec: 'Action interval must be a number ≥ 0 (0 = no rest).',
+  mindTitle: 'Mind (context / memory / desktop sensing)',
+  mindHint:
+    'New in 0.5. This card only shows status and offers two actions; thresholds, cooldowns, privacy lists and frame capture live in the `mind` section of the config file.',
+  mindContextLabel: 'Context usage',
+  mindContextHint: 'Share of the model context window used by the current session; the ring above the pet reads the same data.',
+  mindContextNone: 'No data yet (needs a turn with reported usage)',
+  mindMemoryLabel: 'Memory docs',
+  mindMemoryHint: 'Number of entries indexed under memory/work (work) and memory/companion (companionship).',
+  mindMemoryUnit: ' docs',
+  mindCaptureLabel: 'Desktop sensing',
+  mindCaptureHint: 'Reads foreground app and idle time on Windows; sensitive apps pause it (list in config).',
+  mindCaptureRunning: 'Observing',
+  mindCapturePaused: 'Paused',
+  mindCaptureStandby: 'Standby (you are away)',
+  mindCaptureOff: 'Off / unavailable',
+  mindSummarize: 'Write a memory now',
+  mindSummarizeOk: 'Saved',
+  mindSummarizeFail: 'Not saved',
+  mindPause: 'Pause sensing',
+  mindResume: 'Resume sensing',
   whisperDwellLabel: 'Bubble dwell (s)',
   whisperDwellHint:
     'How long a whisper bubble stays before fading out. 0 = never auto-hide (it stays until the next whisper or until another bubble / a manual clear replaces it). Range 0–600, default 10 s.',
@@ -1117,6 +1158,71 @@ export function makePetConfigSection(rt: {
     // 初值 = 内置默认（whisper 300 / action 0 / balance 1800），加载效应会用成品覆盖。
     const [whisperSec, setWhisperSec] = useState(300);
     const [actionSec, setActionSec] = useState(0);
+
+    // 心智层（0.5）：设置页只做「看 + 两个动作」。字段级配置（阈值/冷却/隐私名单/截帧）
+    // 留在 assets/config.jsonc 的 mind 段——那些值需要解释，塞进输入框反而容易配错。
+    const [mind, setMind] = useState<MindStateView | null>(null);
+    const [mindMsg, setMindMsg] = useState('');
+    const [mindBusy, setMindBusy] = useState(false);
+    const refreshMind = useCallback(async (): Promise<void> => {
+      try {
+        const res = await fetch('/dsh-pet-7340/mind/state', { cache: 'no-store' });
+        if (!res.ok) return;
+        setMind(readMindState(await res.json().catch(() => null)));
+      } catch {
+        /* 老宿主没有 /mind 路由，或网络抖动：保留上一次的值，不打扰用户 */
+      }
+    }, []);
+    useEffect(() => {
+      void refreshMind();
+      const timer = window.setInterval(() => void refreshMind(), 10_000);
+      return () => window.clearInterval(timer);
+    }, [refreshMind]);
+    /** 当前是不是用户按了「暂停采集」 */
+    const mindPaused = (): boolean => mind?.reason === 'paused';
+    const mindContextText = (): string => {
+      const ctx = mind?.context;
+      if (!ctx || typeof ctx.percent !== 'number') return t('mindContextNone');
+      const pct = Math.round(ctx.percent * 100);
+      return ctx.contextWindow
+        ? pct + '%（' + formatTokens(ctx.usedTokens) + ' / ' + formatTokens(ctx.contextWindow) + '）'
+        : pct + '%';
+    };
+    const mindCaptureText = (): string =>
+      mind?.standby
+        ? t('mindCaptureStandby')
+        : mindPaused()
+          ? t('mindCapturePaused')
+          : mind?.capture
+            ? t('mindCaptureRunning')
+            : t('mindCaptureOff');
+    const onMindSummarize = async (): Promise<void> => {
+      setMindBusy(true);
+      setMindMsg('');
+      try {
+        const res = await fetch('/dsh-pet-7340/mind/summarize', { method: 'POST' });
+        const body = (await res.json().catch(() => null)) as { ok?: boolean; file?: string; reason?: string } | null;
+        if (res.ok && body?.ok) {
+          setMindMsg(t('mindSummarizeOk') + (body.file ? '：' + body.file : ''));
+          void refreshMind();
+        } else {
+          setMindMsg(t('mindSummarizeFail') + (body?.reason ? '：' + body.reason : ''));
+        }
+      } catch {
+        setMindMsg(t('mindSummarizeFail'));
+      } finally {
+        setMindBusy(false);
+      }
+    };
+    const onMindPause = async (): Promise<void> => {
+      const next = !mindPaused();
+      try {
+        await fetch('/dsh-pet-7340/mind/pause?paused=' + (next ? '1' : '0'), { method: 'POST' });
+        void refreshMind();
+      } catch {
+        setMindMsg(t('mindCaptureOff'));
+      }
+    };
     const [balanceSec, setBalanceSec] = useState(1800);
     // 本地语句池：以「一行一条」的纯文本维护（textarea 直接编辑），保存时按行拆成数组
     const [whisperPool, setWhisperPool] = useState('');
@@ -2208,6 +2314,43 @@ export function makePetConfigSection(rt: {
                   children: permMsg.text,
                 })
               : null,
+          ],
+        }),
+
+        // 心智层卡（0.5）：上下文 / 记忆 / 感知的只读状态 + 「立即记一份」「暂停采集」。
+        // 全部走 /mind/* 路由，不参与「保存」整包写入——这些是运行时状态与动作，不是配置。
+        h('div', {
+          className: 'dsh-pet-cfg__card',
+          children: [
+            cardHead(t('mindTitle'), t('mindHint')),
+            h('div', {
+              className: 'dsh-pet-cfg__grid3',
+              children: [
+                field(t('mindContextLabel'), h('div', { className: 'dsh-pet-cfg__msg' }, mindContextText()), t('mindContextHint')),
+                field(
+                  t('mindMemoryLabel'),
+                  h('div', { className: 'dsh-pet-cfg__msg' }, String(mind?.memoryDocs ?? 0) + t('mindMemoryUnit')),
+                  t('mindMemoryHint'),
+                ),
+                field(t('mindCaptureLabel'), h('div', { className: 'dsh-pet-cfg__msg' }, mindCaptureText()), t('mindCaptureHint'), true),
+              ],
+            }),
+            h('div', {
+              style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' },
+              children: [
+                h(
+                  'button',
+                  { type: 'button', className: 'dsh-pet-cfg__btn', disabled: mindBusy, onClick: () => void onMindSummarize() },
+                  t('mindSummarize'),
+                ),
+                h(
+                  'button',
+                  { type: 'button', className: 'dsh-pet-cfg__btn', disabled: mindBusy, onClick: () => void onMindPause() },
+                  mindPaused() ? t('mindResume') : t('mindPause'),
+                ),
+                mindMsg ? h('span', { className: 'dsh-pet-cfg__msg' }, mindMsg) : null,
+              ],
+            }),
           ],
         }),
 

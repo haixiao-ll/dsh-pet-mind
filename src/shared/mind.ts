@@ -20,13 +20,15 @@ export interface MindStateView {
   standby: boolean;
   /** 是否允许采集（隐私闸门结果；仅诊断用） */
   capture: boolean;
+  /** 最近一次隐私判定的原因（'ok' / 'paused' / 'sensitive-app' / 'unknown-app' …） */
+  reason: string;
   /** 记忆索引里的文档条数 */
   memoryDocs: number;
 }
 
 /** 从任意 JSON 里安全读出展示视图：字段缺失/类型不对一律降级，绝不抛 */
 export function readMindState(raw: unknown): MindStateView {
-  const empty: MindStateView = { enabled: false, context: null, standby: false, capture: false, memoryDocs: 0 };
+  const empty: MindStateView = { enabled: false, context: null, standby: false, capture: false, reason: '', memoryDocs: 0 };
   if (!raw || typeof raw !== 'object') return empty;
   const obj = raw as Record<string, unknown>;
   if (obj.ok === false) return empty;
@@ -56,6 +58,7 @@ export function readMindState(raw: unknown): MindStateView {
     context,
     standby: activity?.standby === true,
     capture: activity?.capture === true,
+    reason: typeof activity?.reason === 'string' ? activity.reason : '',
     memoryDocs: Number(memory?.docs) > 0 ? Number(memory?.docs) : 0,
   };
 }

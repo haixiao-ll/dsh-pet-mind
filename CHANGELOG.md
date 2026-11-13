@@ -51,7 +51,11 @@
 - **截帧（默认关闭）**：`mind.vision.enabled` 开启后 Helper 每 30s 截一张 640×360 缩略图，
   **内存里算完哈希就销毁**，只回传 `{hash,width,height}`；用于"屏幕还在变 = 人在"的判定，
   不落盘、不进附件库、不发网络。
+- **设置页「心智层」卡片**：上下文用量 / 记忆条数 / 感知状态只读展示，
+  「立即记一份」「暂停/恢复采集」两个动作（全部走 `/mind/*`，不参与「保存」整包写入）。
 - **HTTP**：`/dsh-pet-7340/mind/{state,context,memory,summarize,pause,frame}`。
+- **改名脚本**：`node scripts/rename-fork.mjs --name ... --repo ...` 一次改全
+  package.json / 客户端模块 id / cordis name / 文档安装命令（带 `--dry-run`）。
 - 配置：`assets/config.jsonc` 新增带完整中文注释的 `mind` 段。
 
 ### 新增 · 发布相关
