@@ -22,7 +22,7 @@
 
 import { ContextMeter, ThresholdLatch, sessionIdOf, type SessionLike } from './context-meter';
 import { Coach, contextWarningText, type CoachConfig } from './coach';
-import { MemoryStore, summarizeLocally, type ChatLine } from './memory';
+import { MemoryStore, summarizeLocally, type ChatLine, type WorkSummary } from './memory';
 import { checkPrivacy, isSelfWindow, type PrivacyConfig } from './privacy';
 import { startWindowsActivityWatcher, type ActivityWatcher } from './sensors/windows';
 import type { ActivitySample, ContextSnapshot, Suggestion } from './types';
@@ -42,6 +42,8 @@ export interface MindConfig {
     autoSummary?: boolean;
     /** 把「记忆卡片」注入 DSH 的系统提示词（默认 true，新会话/子支线因此能续上） */
     injectSystemPrompt?: boolean;
+    /** 用模型润色本地摘要（默认 false：临近上限时调模型会再吃上下文，且失败要能退回本地） */
+    polishWithModel?: boolean;
     /** 注入内容的最大字符数（默认 1600；过大反而吃掉上下文） */
     maxInjectChars?: number;
   };
@@ -65,6 +67,9 @@ export interface MindDeps {
   say(text: string): void;
   /** 诊断日志（不带窗口标题） */
   log(message: string): void;
+  /** 可选的模型润色：把本地抽取的摘要交给模型整理。
+   *  约定：失败/不可用返回 null（调用方退回本地摘要），绝不抛错影响写盘。 */
+  polish?(input: { lines: readonly ChatLine[]; draft: WorkSummary }): Promise<Partial<WorkSummary> | null>;
 }
 
 /** 给 HTTP /mind/state 的响应（客户端轮询用；**不含窗口标题**） */
@@ -186,11 +191,9 @@ export class Mind {
 
     if (contextCfg.notify !== false) this.deps.say(contextWarningText(hit, snap.percent));
     if ((cfg.memory ?? {}).autoSummary !== false) {
-      try {
-        this.summarize(snap.sessionId);
-      } catch (error) {
+      void this.summarize(snap.sessionId).catch((error: unknown) => {
         this.deps.log(`自动记忆失败：${(error as Error).message}`);
-      }
+      });
     }
   }
 
@@ -226,17 +229,37 @@ export class Mind {
     this.deps.log(`建议已发送：${suggestion.reason}`);
   }
 
+  /** 是否处于「人不在」的待机态（宿主用它静音碎碎念、客户端用它只播 idle） */
+  isStandby(): boolean {
+    return this.standby;
+  }
+
+  /** 视觉传感器是否可用（当前版本返回 false：截帧管线尚未接线，见 docs/MIND.md） */
+  canSee(): boolean {
+    return false;
+  }
+
   /**
    * 落一份工作记忆。
    * @param sessionId 指定会话；缺省取最近有对话的那条
    * @returns 文件名，或失败原因
    */
-  summarize(sessionId?: string): { ok: true; file: string } | { ok: false; reason: string } {
+  async summarize(sessionId?: string): Promise<{ ok: true; file: string } | { ok: false; reason: string }> {
     const id = sessionId ?? [...this.transcripts.keys()].pop();
     if (!id) return { ok: false, reason: 'no-session' };
     const lines = this.transcripts.get(id) ?? [];
     if (lines.length === 0) return { ok: false, reason: 'no-transcript' };
-    const summary = summarizeLocally(lines);
+    let summary = summarizeLocally(lines);
+    // 可选：模型润色（默认关闭）。**失败就退回本地摘要**——记忆宁可朴素，不能丢。
+    const cfg = this.deps.getConfig();
+    if (cfg.memory?.polishWithModel === true && typeof this.deps.polish === 'function') {
+      try {
+        const polished = await this.deps.polish({ lines, draft: summary });
+        if (polished) summary = { ...summary, ...polished };
+      } catch (error) {
+        this.deps.log(`模型润色失败，退回本地摘要：${(error as Error).message}`);
+      }
+    }
     const file = this.store.writeWork(summary, { sessionId: id });
     // 摘要落盘后清空缓冲，避免同一段对话被重复记（下次从"新的对话"开始）
     this.transcripts.set(id, []);
@@ -297,9 +320,9 @@ export class Mind {
   }
 
   /** 手动触发一次摘要（POST /mind/summarize） */
-  summarizeNow(sessionId?: string): { ok: boolean; file?: string; reason?: string } {
+  async summarizeNow(sessionId?: string): Promise<{ ok: boolean; file?: string; reason?: string }> {
     try {
-      const r = this.summarize(sessionId);
+      const r = await this.summarize(sessionId);
       return r.ok ? { ok: true, file: r.file } : { ok: false, reason: r.reason };
     } catch (error) {
       return { ok: false, reason: (error as Error).message };

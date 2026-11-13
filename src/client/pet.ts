@@ -36,6 +36,7 @@ import {
   type PetFacing,
 } from '../shared/state';
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
+import { ringColor, ringTitle, readMindState, type MindContextView } from '../shared/mind';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import {
@@ -163,6 +164,11 @@ const css = [
   // 宠物就不跟手指走；两条 -webkit-* 抑制长按选中与 iOS 长按呼出系统菜单
   '.dsh-pet-hit{position:absolute;pointer-events:auto;cursor:url("/dsh-pet-7340/pic/cursor-grab.png") 16 16, grab;z-index:1;touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}',
   '.dsh-pet-hit.dragging{cursor:url("/dsh-pet-7340/pic/cursor-grabbing.png") 16 16, grabbing}',
+  // 心智层：上下文用量环（悬停在宠物身上可见，不抢操作）。放在舞台右上角，跟随宠物移动。
+  '.dsh-pet-mind-ring{position:absolute;top:4%;right:4%;width:40px;height:40px;border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.28);background:rgba(15,23,42,.55);backdrop-filter:blur(4px);transition:opacity .2s ease}',
+  '.dsh-pet-mind-ring:hover{background:rgba(15,23,42,.8)}',
+  '.dsh-pet-mind-ring.is-standby{opacity:.55}',
+  '.dsh-pet-mind-ring__text{position:relative;font:600 10px/1 ui-sans-serif,system-ui;color:#e5e7eb;letter-spacing:-.2px;pointer-events:none}',
   '@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
   // 统一右键菜单样式（与桌面注入同一份 MENU_CSS）
   MENU_CSS,
@@ -222,6 +228,8 @@ export function makePetUI(rt: {
     menuItemsRef,
     arena,
     dismissTip,
+    mindContext,
+    mindStandby,
   }: {
     cfg: RuntimePet;
     balance: BalanceState | null;
@@ -265,6 +273,11 @@ export function makePetUI(rt: {
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
     /** 气泡「点一下收起」的悬停提示文案（由 apply 侧按 locale 注入，容器原样转发）。 */
     dismissTip?: string;
+    /** 心智层：上下文用量（容器 10s 轮询 /mind/state 后分发；null = 还没有数据 / 未启用）。
+     *  只用于头顶那圈进度环，不参与任何行为决策。 */
+    mindContext?: MindContextView | null;
+    /** 心智层：是否处于「人不在」的待机态。为真时随机动作链只播 idle，不再掷骰。 */
+    mindStandby?: boolean;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
     const [size, setSize] = useState(cfg.size);
@@ -385,6 +398,12 @@ export function makePetUI(rt: {
     // **用 ref 而不是 state**：冻结/解冻只影响"播什么、动不动"，不参与渲染；而随机链入口
     // （pickNext）与几个事件 effect 都在更早的闭包里读它，读 ref 才是"此刻"。
     const frozenRef = useRef(lock?.locked === true && lock.expiresAt > Date.now());
+    // ---- 心智层待机（0.5）----
+    // 人不在（宿主判定 idle ≥ 5 分钟）时，随机链只播 idle、不再掷骰。
+    // **刻意不复用 frozenRef**：占用锁是"定住等指令"，待机是"安静地活着"——
+    // 前者要暂停视频，后者要继续播 idle 呼吸。用 ref 的原因同 frozenRef：读"此刻"。
+    const standbyRef = useRef(mindStandby === true);
+    standbyRef.current = mindStandby === true;
     /** 解冻定时器：宿主不会到点推送"锁没了"，这里按叶子里的 expiresAt 自己解除 */
     const lockTimerRef = useRef<number | null>(null);
     const dragRef = useRef({
@@ -1041,6 +1060,17 @@ export function makePetUI(rt: {
       // （只有动画播完才会走到），所以一句判断就把随机动画、随机转向、自主走位一起停住——
       // 宠物停在最后一帧，等持锁者的下一条指令（那走 /anim，不经这里）。
       if (frozenRef.current) return;
+      // 待机（心智层判定"人不在"）：不掷骰，只播 idle 呼吸。播完 handleEnded 仍会回到
+      // 这里，于是形成"待机循环"——宠物看起来是安静地待着，而不是定住。
+      // 与占用锁的区别：锁暂停视频（定住），待机继续播 idle（活着但安静）。
+      if (standbyRef.current) {
+        if (petAnims.idle.length) {
+          setAnim(pick(petAnims.idle, animRef.current));
+          setOnce(true);
+          setSeq((s) => s + 1);
+        }
+        return;
+      }
       // 动作间隔（eventsRefreshSec.action）：上一个随机动作播完后的留白还没走完 → 接着播待机，
       // 到点自动续抽下一轮。只挂一个定时器（restTimerRef 非空就不再重复挂），避免掷骰入口被
       // 多条路径同时叫到时堆积多个计时器。
@@ -1820,6 +1850,17 @@ export function makePetUI(rt: {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lockTick, lock]);
 
+    // ---- 心智层待机：进入待机那一刻立刻切 idle（不等当前随机动作播完）----
+    useEffect(() => {
+      if (!mindStandby || frozenRef.current) return;
+      if (!petAnims.idle.length) return;
+      setAnim(pick(petAnims.idle, animRef.current));
+      setOnce(true);
+      setSeq((s) => s + 1);
+      // 只在「进入待机」时执行；petAnims 每次渲染都是新对象，刻意不进依赖
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mindStandby]);
+
     // ---- 点击 vs 拖拽 ----
     const handlePointerDown = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
       // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
@@ -2365,6 +2406,37 @@ export function makePetUI(rt: {
       // 原先这里挂 title（原生系统提示）：已换成自绘浮层，但无障碍名称不能跟着丢
       'aria-label': cfg.name,
     };
+    // ---- 心智层：上下文进度环（只有拿到百分比才渲染；窗口未知时宁可不显示）----
+    const mindPct =
+      mindContext && typeof mindContext.percent === 'number'
+        ? Math.max(0, Math.min(1, mindContext.percent))
+        : null;
+    const mindTitle = ringTitle(mindContext ?? null);
+    const mindRing =
+      mindPct === null
+        ? null
+        : h('div', {
+            className: 'dsh-pet-mind-ring' + (mindStandby ? ' is-standby' : ''),
+            title: mindTitle,
+            'aria-label': mindTitle,
+            children: [
+              // 环：conic-gradient 画进度
+              h('div', {
+                style: {
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '50%',
+                  background:
+                    'conic-gradient(' + ringColor(mindPct) + ' ' + mindPct * 360 + 'deg, rgba(255,255,255,.14) 0)',
+                },
+              }),
+              // 内圈盖一块深色圆盘，把中心掏空成环
+              h('div', {
+                style: { position: 'absolute', inset: '3px', borderRadius: '50%', background: 'rgba(15,23,42,.9)' },
+              }),
+              h('span', { className: 'dsh-pet-mind-ring__text' }, Math.round(mindPct * 100) + '%'),
+            ],
+          });
     return h('div', {
       ref: rootRef,
       className: 'dsh-pet-root',
@@ -2402,6 +2474,8 @@ export function makePetUI(rt: {
             h('video', Object.assign({}, commonVideoProps, { ref: videoARef, className: 'dsh-pet-video is-front' })),
             h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
             h('div', hitProps),
+            // 上下文用量环：常驻在舞台右上角，随宠物移动；点它不拦截拖拽（挂在命中区之上但只占 40px）
+            mindRing,
           ],
         }),
         // 悬浮提示（替代原生 title）：元素常驻、只切 class——挂卸节点吃不到 .12s 淡入过渡；
@@ -2430,6 +2504,36 @@ export function makePetUI(rt: {
     // 共享碰撞站场（宠物间碰撞）：每只 PetCard 注册自己的槽位；飞行中的宠物在 startThrow
     // 每帧读数碰撞。纯 ref 同步，不触发 React 重渲染。
     const arenaRef = useRef<{ slots: Record<string, PetCollisionSlot> }>({ slots: {} });
+    // 心智层（0.5）：容器统一轮询 /mind/state（10s 一次）。
+    // 为什么不塞进 /state 的 1s 轮询：上下文占用是**慢变量**（一步对话才变一次），
+    // 待机切换也是分钟级；单独一条低频轮询比给 S 增加一个每秒都走的叶子更省，也更好关。
+    const [mindContext, setMindContext] = useState<MindContextView | null>(null);
+    const [mindStandby, setMindStandby] = useState(false);
+    useEffect(() => {
+      let alive = true;
+      let timer: number | null = null;
+      const tick = async (): Promise<void> => {
+        try {
+          const res = await fetch('/dsh-pet-7340/mind/state', { cache: 'no-store' });
+          if (res.ok) {
+            const view = readMindState(await res.json().catch(() => null));
+            if (alive) {
+              setMindContext(view.context);
+              setMindStandby(view.standby);
+            }
+          }
+        } catch {
+          // 宿主是老版本（没有 /mind 路由）或网络抖动：静默，下个周期再试。
+          // 这里**不能**报错刷屏——桌宠的核心功能不依赖心智层。
+        }
+        if (alive) timer = window.setTimeout(() => void tick(), 10_000);
+      };
+      void tick();
+      return () => {
+        alive = false;
+        if (timer !== null) window.clearTimeout(timer);
+      };
+    }, []);
     // 余额状态（容器统一拉取，PetCard 共享；balanceTick 每次成功拉取递增，驱动事件动画；
     // balanceNoticeTick 每次「该提示不可用原因」递增，驱动文字说明气泡）
     const [balance, setBalance] = useState<BalanceState | null>(null);
@@ -2707,6 +2811,8 @@ export function makePetUI(rt: {
             menuItemsRef,
             arena: arenaRef,
             dismissTip: bubbleDismissTip,
+            mindContext,
+            mindStandby,
           }),
         )
       : null;

@@ -359,7 +359,15 @@
     // autoSummary：到阈值时自动落一份工作记忆（memory/work/*.md，本地抽取，不调模型）。
     // injectSystemPrompt：把「记忆索引」注入 DSH 系统提示词——新会话 / 子支线因此能续上。
     // maxInjectChars：注入上限（默认 1600 字符；太大反而吃掉上下文）。
-    "memory": { "autoSummary": true, "injectSystemPrompt": true, "maxInjectChars": 1600 },
+    // polishWithModel：用模型润色本地摘要（默认 false）。开启后，到阈值时会多一次模型调用，
+    // 换来更通顺的标题/进展；**调用失败自动退回本地抽取的版本**，记忆不会丢。
+    "memory": {
+      "autoSummary": true,
+      "injectSystemPrompt": true,
+      "maxInjectChars": 1600,
+      "polishWithModel": false
+    },
+
 
     // —— 主动建议（Coach） ——
     // dwellMinutes：在同一界面停留多久才建议（3–5 分钟；默认 3）。

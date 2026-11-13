@@ -43,7 +43,15 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 **阈值提醒**：默认 `[0.8, 0.95]`；同一会话同一档只提醒一次，跨档才再提醒（`ThresholdLatch`）。
 提醒只是"说一句"，不阻塞、不弹窗、不改 DSH 的对话。
 
-**在哪看**：`GET /dsh-pet-7340/mind/context`（或 `/mind/state`）。
+**在哪看**：
+
+- **宠物头顶的进度环**（浏览器 overlay；随宠物移动，悬停显示 `已用 63%（80k / 128k tokens）`）：
+  绿 `<80%`、琥珀 `80–95%`、红 `≥95%`，与提醒档位同一套阈值；待机时环变暗。
+  数据每 10 秒从 `/mind/state` 拉一次——上下文是慢变量，不值得塞进 1 秒的 `/state` 轮询。
+- `GET /dsh-pet-7340/mind/context`（或 `/mind/state`）。
+
+> 环只在**拿到百分比**时出现：窗口未知（宿主没上报 `contextWindow`）时宁可不显示，
+> 也不拿 0 假装"完全空闲"。
 
 ---
 
@@ -62,7 +70,7 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 
 ### 3.2 摘要怎么来的（默认零 token）
 
-`summarizeLocally()` 是**抽取式**，不调用模型：
+`summarizeLocally()` 是**抽取式**，默认不调用模型：
 
 - 标题 = 第一句用户输入；
 - 进展 = 最近 6 条用户发言（人自己说的话最能代表意图）；
@@ -70,9 +78,9 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 - 关键词 = ASCII 词频（中文分词不可靠，硬切只会产生噪音）；
 - 原始线索 = 最近 6 条对话（截断）。
 
-> 想要更通顺的摘要，可以在配置里接模型润色——但**默认不接**：
-> 临近上限时再塞长 prompt，等于把省下来的上下文又吃回去。
-> 接口留在 `Mind.summarize()`，要接只需在写盘前替换 `summary` 对象。
+> 想要更通顺的摘要，可以开 `mind.memory.polishWithModel: true`：把最近 40 行对话交给
+> 当前对话模型整理成严格 JSON（标题/一句话/进展/决策/待办/关键词），失败**自动退回本地版**。
+> 但**默认关闭**：临近上限时再塞长 prompt，等于把省下来的上下文又吃回去。
 
 ### 3.3 「新会话 / 子支线快速学习」
 
@@ -132,8 +140,9 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 - 同一应用停留 ≥ `dwellMinutes`（默认 3）→ 建议一次；
 - **同一次停留只建议一次**；换应用才重新计时；
 - 同应用冷却 `cooldownMinutes`（默认 30）；每天上限 `dailyLimit`（默认 8）；
-- 空闲 ≥ `idleMinutes`（默认 5）→ 视为"人不在"：**不发任何消息**，宠物回待机循环，
-  采集继续但不再产生建议；
+- 空闲 ≥ `idleMinutes`（默认 5）→ 视为"人不在"：**不发任何消息**，宠物转**待机**——
+  随机动作链停掷骰、只播 idle 呼吸（看起来是安静地待着，不是定住），碎碎念也一起静音；
+  采集继续，但不再产生建议。用户回来（有输入）后自动恢复；
 - 夜间免打扰 `quietHours`（默认 23:00–08:00）。
 
 建议文案按应用类型粗分（编辑器/浏览器/聊天/通用），每次从 3 句里随机一条。
@@ -172,7 +181,8 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 "mind": {
   "enabled": true,
   "context": { "thresholds": [0.8, 0.95], "notify": true },
-  "memory":  { "autoSummary": true, "injectSystemPrompt": true, "maxInjectChars": 1600 },
+  "memory":  { "autoSummary": true, "injectSystemPrompt": true, "maxInjectChars": 1600,
+               "polishWithModel": false },
   "coach":   { "enabled": true, "dwellMinutes": 3, "idleMinutes": 5,
                "cooldownMinutes": 30, "dailyLimit": 8, "quietHours": [23, 8] },
   "privacy": { "paused": false, "apps": [], "titlePatterns": [],

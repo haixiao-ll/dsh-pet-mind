@@ -104,6 +104,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { listBalanceProviders, queryBalance, registerBalanceProvider } from './balance/index';
 import { automaticWhisperSchedule } from './whisper-policy';
 import { Mind, type MindConfig } from './mind/index';
+import type { WorkSummary } from './mind/memory';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
 import { limitPool, readMemePool, whisperMeme } from './memes';
@@ -1030,6 +1031,52 @@ export function apply(ctx: any): void {
       state.writePet(petId, 'say', { text });
     },
     log: (message: string) => console.log('[dsh-pet] ' + message),
+    // 可选的模型润色（配置 memory.polishWithModel=true 才走）：把本地抽的骨架交给
+    // 聊天模型整理成更通顺的摘要。**失败一律返回 null**，由 Mind 退回本地摘要——
+    // 记忆是长期资产，不能因为一次模型调用失败就写一份空文档。
+    polish: async ({ lines }) => {
+      const merged = readAllConfig(configPaths) as { main?: Record<string, unknown> };
+      const conf = merged.main ?? {};
+      const transcript = lines
+        .slice(-40)
+        .map((l) => (l.role === 'user' ? '用户：' : '助手：') + l.text)
+        .join('\n');
+      if (!transcript.trim()) return null;
+      const system =
+        '你是记忆整理器。把对话整理成严格 JSON（不要 Markdown 代码块、不要解释）：' +
+        '{"title":"不超过28字","oneLine":"不超过80字","progress":["..."],"decisions":["..."],"todos":["..."],"tags":["英文关键词"]}。' +
+        '只写对话里确实出现的事实，不要编造；每个数组最多 6 条、每条不超过 80 字。';
+      const result = await generateChat(ctx, system, [], transcript, [], configuredModel(conf, 'chatModel'));
+      if (!result.ok) return null;
+      const json = /\{[\s\S]*\}/.exec(result.text);
+      if (!json) return null;
+      let raw: Record<string, unknown>;
+      try {
+        raw = JSON.parse(json[0]) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+      const arr = (v: unknown): string[] | undefined =>
+        Array.isArray(v)
+          ? v
+              .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+              .map((x) => x.trim().slice(0, 120))
+              .slice(0, 6)
+          : undefined;
+      const out: Partial<WorkSummary> = {};
+      if (typeof raw.title === 'string' && raw.title.trim()) out.title = raw.title.trim().slice(0, 40);
+      if (typeof raw.oneLine === 'string' && raw.oneLine.trim()) out.oneLine = raw.oneLine.trim().slice(0, 160);
+      const progress = arr(raw.progress);
+      const decisions = arr(raw.decisions);
+      const todos = arr(raw.todos);
+      const tags = arr(raw.tags);
+      if (progress?.length) out.progress = progress;
+      if (decisions?.length) out.decisions = decisions;
+      if (todos?.length) out.todos = todos;
+      if (tags?.length) out.tags = tags;
+      // 一条可用字段都没有 → 视为失败（让调用方保留本地摘要）
+      return Object.keys(out).length > 0 ? out : null;
+    },
   });
   mind.start();
   ctx.effect(() => () => mind.stop());
@@ -1065,7 +1112,7 @@ export function apply(ctx: any): void {
     if (method === 'POST' && sub === 'summarize') {
       const session = url.searchParams.get('session') ?? undefined;
       // 直接返回 summarizeNow 的结构（ok/file/reason），不要再叠一个 ok 键
-      return { kind: 'json', status: 200, obj: { ...mind.summarizeNow(session) } };
+      return { kind: 'json', status: 200, obj: { ...(await mind.summarizeNow(session)) } };
     }
     if (method === 'POST' && sub === 'pause') {
       const paused = url.searchParams.get('paused') === '1';
@@ -2654,6 +2701,9 @@ export function apply(ctx: any): void {
           if (!schedule.enabled) continue;
           const sec = schedule.periodSec;
           min = Math.min(min, sec);
+          // 待机（心智层判定"人不在"）：不冒泡、不打扰——但**不推进 lastWhisperAt**，
+          // 回来后的下一拍照常说（与占用锁同一条原则：跳过这一拍，不是把这次额度用掉）。
+          if (mind.isStandby()) continue;
           if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) continue;
           // 占用锁：这只宠物被占用时**跳过这一拍**——不生成也不补（碎碎念是瞬时事件，过期即弃）。
           // 而且**不推进 lastWhisperAt**：锁一放开，下一拍就该照常说。
