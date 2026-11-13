@@ -154,7 +154,24 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 如果以后要接视觉模型：只有白名单里的应用、且用户显式点了"看一眼"，
 才把**一帧压缩图**发给模型，发完即弃，不落盘、不进记忆。
 
-### 4.5 诚实的限制
+### 4.5 截帧（默认关闭，只存在于内存）
+
+`mind.vision.enabled=true` 后，桌面 Helper 每 `intervalMs`（默认 30s）做一次：
+
+1. 主进程 `desktopCapturer.getSources` 拿一张 **640×360 缩略图**（只在内存）；
+2. 对 BGRA 位图每 64 字节采样，算 FNV-1a 哈希；
+3. 图像对象立刻被垃圾回收，**只把 `{hash, width, height}` 回给宿主**。
+
+宿主只保存哈希与时间，**从不保存像素**；用途只有一个：判断"屏幕最近变过 = 人在"。
+这样远程桌面/虚拟输入环境下 `GetLastInputInfo` 不重置时，也不会把正在看视频的人误判成待机。
+
+隐私约束（与其余感知一致）：
+
+- 默认关闭；开之前宿主也会先过 `privacy.ts`（敏感应用 / 暂停 / 识别不出 → 不请求）；
+- 帧不落盘、不进 DSH 的附件库（`ImageAttachmentRef` 会持久化，所以**刻意不走模型图片通道**）；
+- 请求带一次性 id + 10s TTL，迟到的帧直接丢弃。
+
+### 4.6 诚实的限制
 
 - **密码框无法从外部可靠识别**：只能靠应用名单 + 窗口标题 + 手动暂停，这是"三道保险"而不是绝对；
 - **提权窗口读不到标题**（UIPI）：所以默认拒绝；
@@ -187,7 +204,8 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
                "cooldownMinutes": 30, "dailyLimit": 8, "quietHours": [23, 8] },
   "privacy": { "paused": false, "apps": [], "titlePatterns": [],
                "cloudAllowlist": [], "unknownIsSensitive": true },
-  "sensor":  { "enabled": true, "intervalMs": 5000 }
+  "sensor":  { "enabled": true, "intervalMs": 5000 },
+  "vision":  { "enabled": false, "intervalMs": 30000, "changeWindowMs": 120000 }
 }
 ```
 

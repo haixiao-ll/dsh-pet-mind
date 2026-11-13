@@ -336,6 +336,29 @@ function applyWorkStatusLeaf(leaf) {
   for (const s of sprites) s.onWorkTick(snap, workTick);
 }
 
+/** 上一次处理过的截帧请求 id（同一 id 只截一次；宿主每次都会换新 id） */
+let lastCaptureId = '';
+
+/**
+ * 截帧请求 → 让主进程截一张（内存里）→ 只把哈希回给宿主。
+ * 任何失败都静默：截帧只是"人在"的辅助证据，不能影响桌宠本体。
+ */
+async function captureAndReport(id) {
+  try {
+    const bridge = window.petBridge;
+    if (!bridge || typeof bridge.captureThumb !== 'function') return;
+    const frame = await bridge.captureThumb();
+    if (!frame || typeof frame.hash !== 'string' || frame.hash === '') return;
+    await fetch(BASE + '/mind/frame', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, hash: frame.hash, width: frame.width, height: frame.height }),
+    }).catch(() => {});
+  } catch {
+    /* 静默降级 */
+  }
+}
+
 /** 心智层叶子 → 进度环 + 待机（0.5）。形状见 host/src/host/mind 的 publishNow()：
  *  { enabled, standby, context: { percent, usedTokens, contextWindow, model } }
  *  只影响"画什么/掷不掷骰"，不碰任何宠物状态机。 */
@@ -349,6 +372,12 @@ function applyMindLeaf(leaf) {
     contextWindow: typeof ctx.contextWindow === 'number' ? ctx.contextWindow : undefined,
   };
   for (const s of sprites) s.setMind(mind);
+  // 截帧请求：id 变了才截一次（像素不出 Helper，回传的只有哈希）
+  const capture = data.capture && typeof data.capture === 'object' ? data.capture : null;
+  if (capture && typeof capture.id === 'string' && capture.id !== '' && capture.id !== lastCaptureId) {
+    lastCaptureId = capture.id;
+    void captureAndReport(capture.id);
+  }
 }
 
 /** 点播动画叶子 → 对应宠物播该动画（其他插件经 POST /anim 写进 S）。

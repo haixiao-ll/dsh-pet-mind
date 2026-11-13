@@ -45,7 +45,7 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = electronApi;
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage, desktopCapturer } = electronApi;
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
@@ -798,6 +798,37 @@ app.whenReady().then(() => {
   void startTray();
 
   createPetWindows();
+
+  // 心智层截帧（0.5）：**只在内存里截一张缩略图、算个采样哈希就销毁**。
+  // 不落盘、不进附件库、不发网络；哈希回给宿主做「屏幕最近变过 = 人在」的证据。
+  // 宿主只在 mind.vision.enabled=true 且隐私闸门放行时才发起请求（见 host/mind/vision.ts）。
+  ipcMain.handle('pet:capture-thumb', async () => {
+    try {
+      if (!desktopCapturer) return null;
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 640, height: 360 },
+        fetchWindowIcons: false,
+      });
+      // 优先主屏（id 形如 screen:0:0），退而求其次取第一块屏
+      const primary = sources.find((s) => String(s.id).startsWith('screen:')) ?? sources[0];
+      const image = primary && primary.thumbnail;
+      if (!image || image.isEmpty()) return null;
+      const size = image.getSize();
+      const bmp = image.getBitmap(); // BGRA，原生 buffer，随作用域销毁
+      // FNV-1a 采样哈希：每 64 字节取一个，足够分辨"画面变了没有"，CPU 可忽略
+      let hash = 2166136261;
+      for (let i = 0; i < bmp.length; i += 64) {
+        hash ^= bmp[i];
+        hash = Math.imul(hash, 16777619);
+      }
+      return { hash: (hash >>> 0).toString(16), width: size.width, height: size.height };
+    } catch (error) {
+      // 截帧失败只影响"活动证据"，绝不能让桌宠本体崩
+      console.warn('[dsh-pet] capture-thumb failed:', error && error.message ? error.message : error);
+      return null;
+    }
+  });
 
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {

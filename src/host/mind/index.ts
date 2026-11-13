@@ -25,6 +25,7 @@ import { Coach, contextWarningText, type CoachConfig } from './coach';
 import { MemoryStore, summarizeLocally, type ChatLine, type WorkSummary } from './memory';
 import { checkPrivacy, isSelfWindow, type PrivacyConfig } from './privacy';
 import { startWindowsActivityWatcher, type ActivityWatcher } from './sensors/windows';
+import { FrameGate, type FrameAccept, type FrameSignal } from './vision';
 import type { ActivitySample, ContextSnapshot, Suggestion } from './types';
 
 /** 用户可在 config.jsonc 的 `mind` 段里改的全部开关（全部有安全默认值） */
@@ -54,6 +55,14 @@ export interface MindConfig {
     enabled?: boolean;
     /** 采样间隔（ms，默认 5000） */
     intervalMs?: number;
+  };
+  vision?: {
+    /** 截帧（默认 **false**：像素相关的能力必须由用户显式打开） */
+    enabled?: boolean;
+    /** 截帧间隔（ms，默认 30000；最小 15000） */
+    intervalMs?: number;
+    /** "屏幕最近变过"的时间窗（ms，默认 120000）：窗内变过视为人在，不待机 */
+    changeWindowMs?: number;
   };
 }
 
@@ -111,6 +120,9 @@ export class Mind {
   /** 上次的前台窗口标识与"它第一次出现的时间"：前台一变就当作人在动（见 onSample 的兜底） */
   private lastForegroundKey = '';
   private foregroundSince = 0;
+  /** 截帧闸门：只存哈希与时间，不存任何像素（见 vision.ts） */
+  private readonly frameGate = new FrameGate();
+  private captureTimer: ReturnType<typeof setInterval> | null = null;
   private framePaused = false;
   private started = false;
 
@@ -128,6 +140,14 @@ export class Mind {
     const cfg = this.deps.getConfig();
     if (cfg.enabled === false) return;
     this.started = true;
+    // 截帧是独立开关：即使关掉活跃度采集，用户也可能只想用「屏幕变化」做活动证据。
+    // 默认关闭——像素相关能力必须由用户显式打开（见 assets/config.jsonc 的 vision 段）。
+    const vision = cfg.vision ?? {};
+    if (vision.enabled === true) {
+      const interval = Math.max(15_000, vision.intervalMs ?? 30_000);
+      this.captureTimer = setInterval(() => this.requestCapture(), interval);
+      this.requestCapture(); // 立刻来一帧，别等 30 秒
+    }
     const sensor = cfg.sensor ?? {};
     if (sensor.enabled === false) {
       this.deps.log('桌面感知：配置关闭');
@@ -145,6 +165,10 @@ export class Mind {
   stop(): void {
     this.watcher?.stop();
     this.watcher = undefined;
+    if (this.captureTimer !== null) {
+      clearInterval(this.captureTimer);
+      this.captureTimer = null;
+    }
     this.started = false;
   }
 
@@ -225,8 +249,11 @@ export class Mind {
       this.foregroundSince = sample.at;
     }
     const justSwitched = sample.at - this.foregroundSince < 10_000;
+    // 屏幕还在变（视频/滚动/远程输入）= 人在。这是比 idle 更硬的证据：
+    // 某些环境 GetLastInputInfo 不随输入重置，只靠它会误判待机。
+    const screenActive = this.frameGate.changedRecently(sample.at, cfg.vision?.changeWindowMs ?? 120_000);
     const wasStandby = this.standby;
-    this.standby = this.coach.isStandby(sample, coachCfg) && !justSwitched;
+    this.standby = this.coach.isStandby(sample, coachCfg) && !justSwitched && !screenActive;
     if (this.standby !== wasStandby) {
       // 人不在：不发消息（用户明确要求"不做任何操作"），只停止建议；回来后也不打扰
       this.deps.log(this.standby ? '桌面感知：用户离开，转入待机' : '桌面感知：用户回来，恢复建议');
@@ -267,10 +294,13 @@ export class Mind {
   publishNow(): void {
     if (typeof this.deps.publish !== 'function') return;
     try {
+      const captureId = this.frameGate.pendingId();
       const view = {
         enabled: this.deps.getConfig().enabled !== false,
         standby: this.standby,
         context: this.meter.latest() ?? null,
+        // 带一次性截帧请求：桌面 Helper 看到 id 变了就截一帧并回传哈希（像素不出 Helper）
+        ...(captureId ? { capture: { id: captureId } } : {}),
       };
       const sig = JSON.stringify(view);
       if (sig === this.lastPublished) return;
@@ -374,6 +404,40 @@ export class Mind {
     } catch (error) {
       return { ok: false, reason: (error as Error).message };
     }
+  }
+
+  /**
+   * 请求 Helper 截一帧（只在内存里算哈希）。
+   * 默认关闭；隐私闸门拦住（敏感应用/暂停/识别不出）时不请求。
+   */
+  requestCapture(): void {
+    const cfg = this.deps.getConfig();
+    if (cfg.enabled === false || cfg.vision?.enabled !== true) return;
+    if (this.framePaused || cfg.privacy?.paused === true) return;
+    if (!this.lastSample) return; // 还不知道前台是什么，过不了隐私闸门
+    const decision = checkPrivacy(
+      { app: this.lastSample.app, title: this.lastSample.title },
+      { ...(cfg.privacy ?? {}), paused: false },
+    );
+    if (!decision.capture) return;
+    this.frameGate.request(Date.now());
+    this.publishNow();
+  }
+
+  /** Helper 回传的一帧摘要：校验 id/TTL，更新"最近变化"证据 */
+  onFrame(signal: FrameSignal): FrameAccept {
+    const result = this.frameGate.accept(signal);
+    if (result.ok && result.changed && this.standby) {
+      // 屏幕刚变过 = 人回来了：立刻解除待机（下一次采样会用 changedRecently 保持住）
+      this.standby = false;
+      this.publishNow();
+    }
+    return result;
+  }
+
+  /** 测试/诊断：最近一次收到有效帧的时间（0 = 还没有） */
+  lastFrameAt(): number {
+    return this.frameGate.lastFrame();
   }
 
   /** 测试/诊断：当前跟踪的会话数 */

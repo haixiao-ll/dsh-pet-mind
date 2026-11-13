@@ -1104,7 +1104,7 @@ export function apply(ctx: any): void {
   }
 
   /** 心智层路由：/dsh-pet-7340/mind/*（只读为主；写操作仅"手动摘要"与"暂停采集"） */
-  const handleMindRoute = async (sub: string, url: URL, method: string): Promise<RouteResult> => {
+  const handleMindRoute = async (sub: string, url: URL, method: string, body?: string): Promise<RouteResult> => {
     if (method === 'GET' && (sub === 'state' || sub === 'context')) {
       const view = mind.view();
       return { kind: 'json', status: 200, obj: sub === 'context' ? { ok: true, context: view.context } : { ok: true, ...view } };
@@ -1121,6 +1121,29 @@ export function apply(ctx: any): void {
       const paused = url.searchParams.get('paused') === '1';
       mind.pause(paused);
       return { kind: 'json', status: 200, obj: { ok: true, paused } };
+    }
+    // 桌面 Helper 回传的一帧摘要（**没有像素**）：只校验 id/形状，更新"屏幕最近变过"的证据。
+    // 帧本身在 Helper 内存里算完哈希就销毁，宿主从头到尾没见过图像。
+    if (method === 'POST' && sub === 'frame') {
+      if (typeof body !== 'string' || body.length === 0 || body.length > 4000) {
+        return { kind: 'json', status: 200, obj: { ok: false, reason: 'bad-body' } };
+      }
+      try {
+        const raw = JSON.parse(body) as Record<string, unknown>;
+        const result = mind.onFrame({
+          id: String(raw.id ?? ''),
+          hash: String(raw.hash ?? ''),
+          width: Number(raw.width) || 0,
+          height: Number(raw.height) || 0,
+        });
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: result.ok, changed: result.changed, ...(result.reason ? { reason: result.reason } : {}) },
+        };
+      } catch {
+        return { kind: 'json', status: 200, obj: { ok: false, reason: 'bad-json' } };
+      }
     }
     return { kind: 'json', status: 404, obj: { error: 'not found' } };
   };
@@ -1345,7 +1368,7 @@ export function apply(ctx: any): void {
 
     // 心智层：/dsh-pet-7340/mind/*（上下文用量 / 记忆索引 / 手动摘要 / 采集暂停）
     if (rest === 'mind' || rest.startsWith('mind/')) {
-      return handleMindRoute(rest.slice(4).replace(/^\//, ''), url, method);
+      return handleMindRoute(rest.slice(4).replace(/^\//, ''), url, method, body);
     }
 
     // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / POST 同步内置默认）

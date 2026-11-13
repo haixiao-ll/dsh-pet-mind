@@ -44,7 +44,14 @@
   识别不出即拒绝（fail-closed）；`cloudAllowlist` 留空 = 任何画面不出本机。
 - **Coach**：停留 3 分钟建议一次、同一次停留只一次、同应用 30 分钟冷却、每日 8 条上限、
   23:00–08:00 免打扰；空闲 5 分钟视为"人不在"，不建议、不打扰。
-- **HTTP**：`/dsh-pet-7340/mind/{state,context,memory,summarize,pause}`。
+- **进度环**：浏览器 overlay 与桌面透明窗两端都有（`/mind/state` 10s 轮询 / `sections.mind` 叶子），
+  绿 `<80%`、琥珀 `80–95%`、红 `≥95%`，悬停显示 token 数；窗口未知时不画。
+- **待机**：人不在（空闲 ≥5 分钟且屏幕未变化、前台未切换）→ 随机链只播 idle、碎碎念静音；
+  回来自动恢复。桌面端读同一条 `sections.mind`。
+- **截帧（默认关闭）**：`mind.vision.enabled` 开启后 Helper 每 30s 截一张 640×360 缩略图，
+  **内存里算完哈希就销毁**，只回传 `{hash,width,height}`；用于"屏幕还在变 = 人在"的判定，
+  不落盘、不进附件库、不发网络。
+- **HTTP**：`/dsh-pet-7340/mind/{state,context,memory,summarize,pause,frame}`。
 - 配置：`assets/config.jsonc` 新增带完整中文注释的 `mind` 段。
 
 ### 新增 · 发布相关
