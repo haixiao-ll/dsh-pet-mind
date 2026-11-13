@@ -1,0 +1,79 @@
+# 手动触发的发布流水线（默认**不发布到 npm**，只产出可安装的 tgz）。
+#
+# 为什么默认不发 npm：本仓库首先是"你自己的 fork"，发布到哪个 registry、用哪个包名、
+# 素材有没有授权，都需要你本人确认过。这里只做安全的部分：
+#   构建 → 全量测试 → 自检 → 打包 → 上传 artifact（可选再建一个 GitHub Release）。
+#
+# 想发 npm 时：在本地 `npm publish --access public`（或用下面注释里的 OIDC 方案，
+# 但请先把 package.json 的 name 换成你自己的 scope，否则会撞上游包名）。
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要打的 tag（例如 v0.5.0；留空则不建 Release，只上传 artifact）'
+        required: false
+        default: ''
+      notes:
+        description: 'Release 说明（可留空，默认用 CHANGELOG 里当前版本那一节）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify package
+        run: node tools/verify-package.mjs
+
+      - name: Pack
+        run: npm pack
+
+      - name: Upload tgz artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-pet-mind-package
+          path: '*.tgz'
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TGZ=$(ls *.tgz | head -1)
+          NOTES="${{ inputs.notes }}"
+          if [ -z "$NOTES" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\\\[" ver "\\\\]" { flag = 1; next }
+              flag && /^## \\[/ { exit }
+              flag { print }
+            ' CHANGELOG.md > notes.md || true
+            NOTES=$(cat notes.md)
+          fi
+          gh release create "${{ inputs.tag }}" "$TGZ" --title "${{ inputs.tag }}" --notes "$NOTES"

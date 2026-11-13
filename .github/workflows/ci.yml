@@ -1,0 +1,67 @@
+# 日常 CI（push / PR）：类型检查 → 单测 → 构建 → 清单自检 → 打包演练。
+#
+# 本仓库从 src/ 构建（lib/ 不入库），所以这里必须真的装依赖、真的编译一遍：
+# 只跑静态检查会漏掉"tsc 过了但打不出包"的问题。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      # package-lock.json 入库 → npm ci 保证可复现
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # 严格类型检查（noUnusedLocals / noUnusedParameters 全开）
+      - name: Typecheck
+        run: npm run typecheck
+
+      # 单测：node:test + 原生类型擦除，直接跑 src/**/*.test.ts
+      - name: Unit tests
+        run: npm test
+
+      # 三份入口 + 桌面 shared-core
+      - name: Build
+        run: npm run build
+
+      # 清单自洽 / 客户端模块 id / cordis 挂载行 / 默认配置 / 本机路径泄漏
+      - name: Verify package
+        run: node tools/verify-package.mjs
+
+      # 打包演练：确认 files 白名单真的带上了动画、运行时、采集脚本
+      - name: Pack dry-run
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync("pack.json", "utf8"))[0];
+            const names = r.files.map((f) => f.path);
+            const need = ["lib/index.js", "lib/client.js", "assets/config.jsonc", "cordis.patch.yml"];
+            const missing = need.filter((n) => !names.includes(n));
+            if (missing.length) {
+              console.error("包里缺少：" + missing.join(", "));
+              process.exit(1);
+            }
+            const webm = names.filter((n) => n.endsWith(".webm")).length;
+            console.log("包内文件 " + names.length + " 个，其中动画 " + webm + " 个");
+            if (webm === 0) {
+              console.error("包里没有 .webm 动画——files 白名单写错了");
+              process.exit(1);
+            }
+          '

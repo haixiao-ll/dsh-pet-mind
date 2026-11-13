@@ -1,0 +1,158 @@
+{
+  "name": "dsh-pet-mind",
+  "version": "0.5.0",
+  "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。0.5 增强 fork：恢复 TypeScript 构建链，新增 mind 心智层（上下文用量、双轨长期记忆、桌面感知与主动建议，只直播不录屏）。详见 CHANGELOG / docs。",
+  "icon": "assets/logo.png",
+  "keywords": [
+    "context-window",
+    "cordis",
+    "deepseek-harness",
+    "desktop-agent",
+    "desktop-pet",
+    "dsh",
+    "dsh-plugin",
+    "floating-widget",
+    "memory",
+    "pet",
+    "react",
+    "web-ui"
+  ],
+  "homepage": "https://github.com/your-id/dsh-pet-mind#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-id/dsh-pet-mind.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-id/dsh-pet-mind/issues"
+  },
+  "_comment": [
+    "=============== 包清单说明（中文注释） ===============",
+    "来源链：PC2005-cloud/dsh-pet v0.3.8（MIT）→ TuWeiZhi/dsh-pet 0.4.4（MIT）→ 本仓库（MIT）",
+    "本仓库把 TuWeiZhi 只打在构建产物上的 patch 回植到 TypeScript 源码，并恢复完整构建链：",
+    "  npm run build  = tsdown 把 src/ 编译成 lib/ + 构建桌面 shared-core + 生成 d.ts",
+    "type: module —— 本包是 ESM，宿主半侧由 DSH 的 Loader import",
+    "main/exports 指向 lib/（构建产物，不入 git，由 npm run build 生成）",
+    "dsh.bundle.patch —— 声明本包是 bundle，cordis.patch.yml 安装后自动进层栈",
+    "dsh.client.platform=web —— 浏览器半侧入口，DSH 按 exports['./client'] 提供 /plugins/<包名>/client.js",
+    "src/client/index.ts 里 __ModuleLoader__.load({ id }) 的 id 必须与 name 逐字一致",
+    "files —— npm publish 只发这些内容；assets/webm 是 VP9-alpha 播放素材（体积大，但不发就播不了）",
+    "================================================"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "bin": {
+    "dsh-pet-standalone": "lib/standalone.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "assets/webm",
+    "runtime/electron-helper",
+    "assets/fonts",
+    "assets/pic",
+    "assets/memes",
+    "assets/config.jsonc",
+    "assets/logo.png",
+    "scripts/ensure-electron.mjs",
+    "scripts/mind",
+    "cordis.patch.yml",
+    "NOTICE.md",
+    "CHANGELOG.md",
+    "THIRD-PARTY-NOTICES.md",
+    "docs"
+  ],
+  "scripts": {
+    "bundle": "tsdown",
+    "build": "node scripts/prepare.js",
+    "build:desktop-core": "node scripts/build-desktop-core.mjs",
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "types": "node scripts/gen-types.mjs",
+    "test": "node --experimental-strip-types --import ./scripts/test-register.mjs --test \"src/**/*.test.ts\"",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "ensure:electron": "node scripts/ensure-electron.mjs",
+    "start:desktop": "node scripts/start-desktop.mjs",
+    "standalone": "node lib/standalone.js",
+    "dev:mock": "node scripts/dev/mock-server.mjs",
+    "prepack": "npm run build && npm run typecheck && node scripts/prepack-check.js",
+    "verify": "node tools/verify-package.mjs"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
+    "@electron-internal/extract-zip": "^1.0.5",
+    "@electron/get": "^5.1.0",
+    "openai": "7.39.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "js-yaml": "^5.4.2",
+    "prettier": "^3.9.6",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "rolldown": "1.0.0-beta.7",
+    "tsdown": "^0.8.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.67.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.7-rc.2": "incompatible",
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-rc.2": "compatible"
+      }
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
