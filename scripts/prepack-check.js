@@ -32,7 +32,7 @@ const fail = (msg) => {
   console.error(`[prepack-check] FAIL: ${msg}`);
   process.exitCode = 1;
 };
-const ok = (msg) => console.log(`[prepack-check] ok: ${msg}`);
+const ok = (msg) => console.error(`[prepack-check] ok: ${msg}`);
 /** JSONC → JSON：字符串感知地剥离行注释与块注释（config.jsonc 里有行尾注释） */
 const stripJsonc = (s) => {
   let out = '';
@@ -139,13 +139,13 @@ try {
   const extra = [...onDisk].filter((k) => !keys.includes(k));
   if (!missing.length && !extra.length) ok(`memes mapping aligned (${keys.length} keys = ${memePngs.length} png)`);
   else
-    console.log(
+    console.error(
       `[prepack-check] note: memes 键与图片不齐 —— 缺图 ${missing.length} 条${
         missing.length ? `（${missing.join('、')}）` : ''
       }；没写进配置的图 ${extra.length} 张${extra.length ? `（${extra.join('、')}）` : ''}`,
     );
 } catch (e) {
-  console.log(`[prepack-check] note: 跳过 memes 键对齐核对（config.jsonc 解析失败：${e.message}）`);
+  console.error(`[prepack-check] note: 跳过 memes 键对齐核对（config.jsonc 解析失败：${e.message}）`);
 }
 
 // ---- 7. 包总大小估算（排除 node_modules/.git/脚本/素材源目录/README预览GIF） ----
@@ -188,4 +188,4 @@ else ok(`no undeclared ${OXC_RUNTIME} import in bundles`);
 
 // ---- 汇总 ----
 if (process.exitCode) console.error('\n[prepack-check] fix the failures above before publishing.');
-else console.log('\n[prepack-check] all checks passed — ready to pack/publish.');
+else console.error('\n[prepack-check] all checks passed — ready to pack/publish.');
