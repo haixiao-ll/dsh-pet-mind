@@ -42,15 +42,17 @@ test('停留不足 3 分钟不建议；满 3 分钟建议一次', () => {
   assert.match(first!.text, /[。？！?!]$/);
 });
 
-test('同一次停留只建议一次；30 分钟后才可能再来一条', () => {
+test('一次停留只建议一次：同一页面等多久都不再来；标题变了才算新页面', () => {
   const h = harness();
   h.tick();
   h.adv(3 * 60_000);
   assert.ok(h.tick());
-  h.adv(3 * 60_000);
-  assert.equal(h.tick(), null, '冷却期内不再打扰');
   h.adv(30 * 60_000);
-  assert.ok(h.tick(), '冷却结束后可以再建议');
+  assert.equal(h.tick(), null, '同一停留不再建议（没有冷却这回事）');
+  // 浏览器切标签 / IDE 切文件 = 标题变化 = 新页面
+  h.tick({ title: '另一个页面' });
+  h.adv(3 * 60_000);
+  assert.ok(h.tick({ title: '另一个页面' }), '标题变化后重新给一次机会');
 });
 
 test('换应用 = 重新计时', () => {
@@ -86,12 +88,13 @@ test('夜间免打扰默认 [23,8)', () => {
   assert.equal(coach.isQuietHour(new Date('2026-11-13T09:00:00').getTime()), false);
 });
 
-test('每日上限 8 条', () => {
-  const h = harness({ dailyLimit: 2, cooldownMinutes: 0 });
-  h.tick();
+test('每日上限：全局计数，换页面也不再给', () => {
+  const h = harness({ dailyLimit: 2 });
   for (let i = 0; i < 5; i += 1) {
+    const title = 'page-' + i; // 每次都是新页面
+    h.tick({ title });
     h.adv(3 * 60_000);
-    h.tick();
+    h.tick({ title });
   }
   assert.equal(h.coach.countToday(), 2);
 });
@@ -101,13 +104,13 @@ test('上下文提醒文案按档位区分', () => {
   assert.match(contextWarningText(0.95, 0.96), /不到 5%/);
 });
 
-test('dwellSec / cooldownSec：30 秒即可建议一次，冷却也按秒', () => {
-  const h = harness({ dwellSec: 30, cooldownSec: 30 });
+test('dwellSec：30 秒触发；同一次停留不会再来第二次', () => {
+  const h = harness({ dwellSec: 30 });
   h.tick();
   h.adv(29_000);
   assert.equal(h.tick(), null);
   h.adv(2_000);
   assert.ok(h.tick(), '满 30 秒应建议');
   h.adv(31_000);
-  assert.ok(h.tick(), '冷却 30 秒后可以再一次');
+  assert.equal(h.tick(), null, '同一次停留只建议一次');
 });

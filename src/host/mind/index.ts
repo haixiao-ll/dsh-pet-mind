@@ -27,6 +27,7 @@ import { checkPrivacy, cloudAllowed, isSelfWindow, type PrivacyConfig } from './
 import { startWindowsActivityWatcher, type ActivityWatcher } from './sensors/windows';
 import { FrameGate, type FrameAccept, type FrameSignal } from './vision';
 import { analyzeScreen, type VisionAnalyzeConfig } from './vision-model';
+import { ocrDataUrl } from './ocr';
 import type { ActivitySample, ContextSnapshot, Suggestion } from './types';
 
 /** 用户可在 config.jsonc 的 `mind` 段里改的全部开关（全部有安全默认值） */
@@ -50,6 +51,12 @@ export interface MindConfig {
     maxInjectChars?: number;
   };
   coach?: CoachConfig & { enabled?: boolean };
+  suggestion?: {
+    /** 用哪个文本模型写建议（留空 = 跟随当前对话模型；想省钱就填一个轻量模型） */
+    model?: { provider: string; model: string };
+    /** 建议文字上限（默认 60 字） */
+    maxChars?: number;
+  };
   privacy?: PrivacyConfig;
   sensor?: {
     /** 桌面活跃度采集（默认 true；只有 win32 有效） */
@@ -64,7 +71,7 @@ export interface MindConfig {
      * 'local'（默认）= 只算哈希，判断"屏幕变过 = 人在"；
      * 'model' = 到点让视觉模型看一帧并给一句内容相关的建议（帧会发给你配置的端点）。
      */
-    mode?: 'local' | 'model';
+    mode?: 'local' | 'ocr' | 'model';
     /** 截帧间隔（ms，默认 30000；最小 15000） */
     intervalMs?: number;
     /** "屏幕最近变过"的时间窗（ms，默认 120000）：窗内变过视为人在，不待机 */
@@ -87,6 +94,8 @@ export interface MindDeps {
   /** 可选的模型润色：把本地抽取的摘要交给模型整理。
    *  约定：失败/不可用返回 null（调用方退回本地摘要），绝不抛错影响写盘。 */
   polish?(input: { lines: readonly ChatLine[]; draft: WorkSummary }): Promise<Partial<WorkSummary> | null>;
+  /** OCR 文本 → 一句建议（宿主用"轻度文本模型"实现）。返回 null = 不打扰。 */
+  suggest?(input: { text: string; app?: string }): Promise<string | null>;
   /** 把展示用的心智状态单向广播给渲染端（宿主写 S 的 sections.mind）。
    *  浏览器用它画进度环、桌面 Helper 用它切待机；失败不影响任何逻辑。 */
   publish?(view: { enabled: boolean; standby: boolean; context: ContextSnapshot | null }): void;
@@ -135,8 +144,8 @@ export class Mind {
   /** 本次进程收到过多少帧（只用于"第一帧"提示，不落盘） */
   private frameCount = 0;
   private captureTimer: ReturnType<typeof setInterval> | null = null;
-  /** 这次截帧是不是为了"视觉建议"（要带 dataUrl），而不是只算哈希 */
-  private pendingVision = false;
+  /** 这次截帧的用途：hash 只算变化；ocr/model 要带图（后者分别走本地 OCR / 云端视觉） */
+  private pendingKind: 'hash' | 'ocr' | 'model' = 'hash';
   /** 同一时刻只允许一次视觉分析在路上（30 秒节奏已经够密，别叠请求） */
   private analyzing = false;
   private framePaused = false;
@@ -161,7 +170,7 @@ export class Mind {
     const vision = cfg.vision ?? {};
     // mode=model 时不跑固定截帧定时器：截帧由"停留到期"驱动（见 onSample），
     // 避免每 30 秒既截哈希帧又截视觉帧、同一时刻两个 pending 抢闸门。
-    if (vision.enabled === true && vision.mode !== 'model') {
+    if (vision.enabled === true && vision.mode !== 'model' && vision.mode !== 'ocr') {
       const interval = Math.max(15_000, vision.intervalMs ?? 30_000);
       this.captureTimer = setInterval(() => this.requestCapture(), interval);
       this.requestCapture(); // 立刻来一帧，别等 30 秒
@@ -293,10 +302,12 @@ export class Mind {
     if (this.standby) return;
     if (coachCfg.enabled === false) return;
 
-    // 视觉建议模式：到点截一帧，交给模型"看着画面说"——文案不来自本地模板。
-    // 本地模式（默认）仍走下面那套零成本文案。
-    if (cfg.vision?.enabled === true && cfg.vision.mode === 'model') {
-      if (this.coach.due(sample, decision.capture, coachCfg)) this.requestCapture(true);
+    // OCR 模式（默认）：到点截一帧 → Windows 本地 OCR → 文字交给轻度文本模型。
+    // 云端视觉（mode=model）仍保留为显式可选项，但默认不走（画面不出本机）。
+    if (cfg.vision?.enabled === true && (cfg.vision.mode === 'ocr' || cfg.vision.mode === 'model')) {
+      if (this.coach.due(sample, decision.capture, coachCfg)) {
+        this.requestCapture(cfg.vision.mode === 'ocr' ? 'ocr' : 'model');
+      }
       return;
     }
 
@@ -326,7 +337,7 @@ export class Mind {
         context: this.meter.latest() ?? null,
         // 带一次性截帧请求：Helper 看到 id 变了就截一帧。
         // image=true 时才把 JPEG 一起回传（视觉建议模式）；否则只回哈希。
-        ...(captureId ? { capture: { id: captureId, image: this.pendingVision } } : {}),
+        ...(captureId ? { capture: { id: captureId, image: this.pendingKind !== 'hash' } } : {}),
       };
       const sig = JSON.stringify(view);
       if (sig === this.lastPublished) return;
@@ -441,7 +452,7 @@ export class Mind {
    * 请求 Helper 截一帧（只在内存里算哈希）。
    * 默认关闭；隐私闸门拦住（敏感应用/暂停/识别不出）时不请求。
    */
-  requestCapture(withImage = false): void {
+  requestCapture(kind: 'hash' | 'ocr' | 'model' = 'hash'): void {
     const cfg = this.deps.getConfig();
     if (cfg.enabled === false || cfg.vision?.enabled !== true) return;
     if (this.framePaused || cfg.privacy?.paused === true) return;
@@ -451,8 +462,8 @@ export class Mind {
       { ...(cfg.privacy ?? {}), paused: false },
     );
     if (!decision.capture) return;
-    if (withImage && cfg.vision?.mode !== 'model') return; // 只有视觉模式才带图
-    this.pendingVision = withImage;
+    if (kind !== 'hash' && cfg.vision?.mode !== 'ocr' && cfg.vision?.mode !== 'model') return;
+    this.pendingKind = kind;
     this.frameGate.request(Date.now());
     this.publishNow();
   }
@@ -460,11 +471,12 @@ export class Mind {
   /** Helper 回传的一帧摘要：校验 id/TTL，更新"最近变化"证据；带图时顺手交给模型 */
   onFrame(signal: FrameSignal): FrameAccept {
     const result = this.frameGate.accept(signal);
-    const wantsImage = this.pendingVision;
-    this.pendingVision = false;
-    if (result.ok && wantsImage && typeof signal.dataUrl === 'string' && signal.dataUrl !== '') {
-      void this.analyzeFrame(signal.dataUrl).catch((error: unknown) => {
-        this.deps.log(`视觉建议失败：${(error as Error).message}`);
+    const kind = this.pendingKind;
+    this.pendingKind = 'hash';
+    if (result.ok && kind !== 'hash' && typeof signal.dataUrl === 'string' && signal.dataUrl !== '') {
+      const job = kind === 'ocr' ? this.ocrAndSuggest(signal.dataUrl) : this.analyzeFrame(signal.dataUrl);
+      void job.catch((error: unknown) => {
+        this.deps.log(`建议生成失败：${(error as Error).message}`);
       });
     }
     if (result.ok && this.frameCount === 0) {
@@ -480,6 +492,36 @@ export class Mind {
       this.publishNow();
     }
     return result;
+  }
+
+  /**
+   * 本地 OCR → 文本 → 轻度文本模型 → 一句建议。
+   *
+   * 全链路在内存：帧 → PowerShell stdin → WinRT OCR → 文字 → 宿主 prompt → 当前模型。
+   * 识别不出文字（视频/游戏/纯图）就不打扰——不拿通用文案凑数。
+   */
+  private async ocrAndSuggest(dataUrl: string): Promise<void> {
+    const ocr = await ocrDataUrl(dataUrl);
+    if (!ocr.ok) {
+      this.deps.log(`OCR 未产出文字：${ocr.reason}`);
+      return;
+    }
+    if (ocr.text.length < 4) {
+      this.deps.log('OCR 未产出可用文字（太短）');
+      return;
+    }
+    // 只记长度，不记内容：OCR 文本可能含屏幕上的隐私信息，日志里不该出现
+    this.deps.log(`OCR 识别到 ${ocr.text.length} 字`);
+    const app = this.lastSample?.app;
+    if (typeof this.deps.suggest !== 'function') return;
+    const text = await this.deps.suggest({ text: ocr.text, app });
+    if (!text) {
+      this.deps.log('建议模型未返回可用文案（不弹气泡）');
+      return;
+    }
+    this.lastSuggestion = { key: app ?? 'unknown', text, reason: 'dwell', at: Date.now() };
+    this.deps.say(text);
+    this.deps.log('建议已发送：ocr');
   }
 
   /**

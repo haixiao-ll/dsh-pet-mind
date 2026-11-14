@@ -374,16 +374,18 @@
     // idleMinutes：空闲多久算"人不在"（默认 5）——人不在时不建议、不打扰，宠物回待机循环。
     // cooldownMinutes：同一应用的冷却（默认 30）；dailyLimit：每天最多几条（默认 8）。
     // quietHours：[开始小时, 结束小时)，默认 [23, 8) 夜间免打扰（跨午夜写法）。
-    // dwellSec / cooldownSec 优先于旧的 dwellMinutes / cooldownMinutes（30 秒一轮）。
-    // 想要旧节奏就写 dwellMinutes: 3（没写 dwellSec 时才生效）。
+    // 一次"停留"（同一应用 + 同一窗口标题）只建议一次：进入后 30 秒触发，之后不再打扰，
+    // 切页面/切应用才算新的一次。全局每天最多 6 条（本地零点重置）。
     "coach": {
       "enabled": true,
       "dwellSec": 30,
-      "cooldownSec": 30,
       "idleMinutes": 5,
-      "dailyLimit": 120,
+      "dailyLimit": 6,
       "quietHours": [23, 8]
     },
+    // 建议文案由文本模型生成（OCR 文本作为输入）。留空 = 跟随当前对话模型；
+    // 想更轻/更省就填一个小模型（不需要多模态）。
+    "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 40 },
 
     // —— 隐私（桌面感知的闸门） ——
     // 默认只做本地判断：不截图、不录屏、不落盘，只读"前台进程名 + 窗口标题"，标题用完即弃。
@@ -406,17 +408,15 @@
     "sensor": { "enabled": true, "intervalMs": 5000 },
 
     // —— 截帧与视觉建议（默认关闭） ——
-    // enabled=true 后，桌面 Helper 截一张 640×360 缩略图（只在内存）。
-    //   mode='local'（默认）：只算哈希，用于"屏幕还在变 = 人在"，**什么都不发出去**；
-    //   mode='model'：到点（30 秒级）把这一帧发给下面 analyze 配的视觉端点，让模型
-    //     "看着画面说一句"，气泡文案来自模型而不是本地模板。
-    //       · 帧会离开本机（只到你自己配的端点），不落盘、不进 DSH 附件库；
-    //       · 密钥只从环境变量读（apiKeyEnv），**不要**写进这个文件；
-    //       · allApps=false（默认）时只发 privacy.cloudAllowlist 里的应用；
-    //         要覆盖所有非敏感界面，显式写 allApps: true。
+    // enabled=true 后，桌面 Helper 截一张缩略图（只在内存）：local 模式 640×360，
+    // ocr/model 模式 1600×900（OCR 需要足够清晰的字形）。
+    //   mode='local'：只算哈希，用于"屏幕还在变 = 人在"，**什么都不发出去**；
+    //   mode='ocr'（建议）：到点把这一帧交给 **Windows 自带 OCR**（本地、不联网、不下模型），
+    //     识别出的文字再交给文本模型写建议——画面本身不出本机；
+    //   mode='model'（可选、默认关）：跳过 OCR，直接把帧发给 analyze 配的云端视觉端点。
     "vision": {
       "enabled": false,
-      "mode": "local",
+      "mode": "ocr",
       "intervalMs": 30000,
       "changeWindowMs": 120000,
       "analyze": {

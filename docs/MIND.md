@@ -137,9 +137,10 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 
 ### 4.3 建议规则（`coach.ts`）
 
-- 同一应用停留 ≥ `dwellSec`（默认 30 秒；旧的 `dwellMinutes` 仍兼容）→ 建议一次；
-- **同一次停留只建议一次**；换应用才重新计时；
-- 同应用冷却 `cooldownSec`（默认 30 秒）；每天上限 `dailyLimit`（默认 120）；
+- **一次停留只建议一次**：进入一个页面/应用后满 `dwellSec`（默认 30 秒）触发，
+  之后这个页面不再打扰；"新的一次停留" = 应用或**窗口标题**变化（切标签、切文件都算）；
+- 全局每天最多 `dailyLimit`（默认 6）条，本地零点重置；
+- 旧的 `dwellMinutes` / `cooldownMinutes` 仍兼容，但冷却概念已被"一次停留一次"取代；
 - 空闲 ≥ `idleMinutes`（默认 5）→ 视为"人不在"：**不发任何消息**，宠物转**待机**——
   随机动作链停掷骰、只播 idle 呼吸（看起来是安静地待着，不是定住），碎碎念也一起静音；
   采集继续，但不再产生建议。用户回来（有输入）后自动恢复；
@@ -173,38 +174,36 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 - 帧不落盘、不进 DSH 的附件库（`ImageAttachmentRef` 会持久化，所以**刻意不走模型图片通道**）；
 - 请求带一次性 id + 10s TTL，迟到的帧直接丢弃。
 
-### 4.6 视觉建议（`mode: "model"`）—— 让模型看着画面说
+### 4.6 画面 → 文本 → 建议（默认 `mode: "ocr"`）
 
-`local` 模式只算哈希；`model` 模式在**停留满 `dwellSec`（默认 30 秒）**时截一帧发给视觉模型，
-气泡里的字来自模型，而不是本地模板。
+到点后不是把图直接丢给模型，而是先在本地转成文字：
+
+```
+Helper 截帧（OCR 模式用 1600×900，缩到 640×360 文字会糊）→ base64 经 bridge 回宿主
+  → PowerShell stdin → Windows.Media.Ocr（系统自带 OCR，本地、不联网、不下模型）
+  → 识别出的文字 + 前台应用名 → 当前文本模型（或 suggestion.model 指定的轻量模型）
+  → 一句建议 → 气泡
+```
+
+配置：
 
 ```jsonc
 "mind": {
-  "coach": { "dwellSec": 30, "cooldownSec": 30, "dailyLimit": 120 },
-  "vision": {
-    "enabled": true,
-    "mode": "model",
-    "analyze": {
-      "enabled": true,
-      "endpoint": "https://api.openai.com/v1/chat/completions", // OpenAI 兼容
-      "model": "gpt-4o-mini",
-      "apiKeyEnv": "OPENAI_API_KEY",   // 密钥只从环境变量读，别写进配置文件
-      "allApps": false                  // false = 只发 cloudAllowlist 里的应用
-    }
-  }
+  "coach": { "dwellSec": 30, "dailyLimit": 6 },
+  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 40 },
+  "vision": { "enabled": true, "mode": "ocr" }
 }
 ```
 
 要点：
 
-- **帧会离开本机**（只到你配的端点），所以默认关闭；`allApps:false` 时还必须把应用写进
-  `privacy.cloudAllowlist`。敏感应用（微信/支付/网银/密码管理器/远程桌面）在出帧前就被拦掉；
-- 帧是 640×360 JPEG（约 20–40KB），只在内存里：Helper 截图 → base64 → bridge → 宿主 fetch → 模型，
-  **不落盘、不进 DSH 附件库**（DSH 的图片消息会持久化附件，所以刻意不用 `ctx.llm` 的图片通道）；
-- 模型回 `SKIP`（看到私密内容）时**不弹气泡**；端点超时/报错也只记日志，**不会退回本地模板**——
-  你要的是"模型说的"，糊弄一句预设文案不如不说；
-- 密钥不写配置：用 `apiKeyEnv` 指定环境变量名（默认 `OPENAI_API_KEY`），DSH 进程里要有这个变量；
-- 视觉模型要和文本模型分开配：DSH 常用的 DeepSeek-Chat 是纯文本，需要单独指一个多模态端点。
+- **画面不出本机**：OCR 是系统组件，图片只经过内存；出网的只有"识别出的文字 + 应用名"，
+  而且是交给**你自己选的文本模型**（和普通对话同一套凭证）；
+- 不需要多模态模型：DeepSeek-Chat 这类纯文本模型就能用；
+- `suggestion.model` 留空 = 跟随当前对话模型；填一个小模型可以明显降低费用；
+- OCR 读不出字（视频/游戏/纯图）→ **不打扰**，不拿通用文案凑数；
+- 模型回 `SKIP`（文字里出现密码/支付/私聊）→ 不弹；
+- 旧的 `mode: "model"`（直接把帧发给云端视觉端点）仍保留，但默认关、需要显式配置端点与密钥。
 
 ### 4.7 诚实的限制
 
@@ -235,15 +234,15 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
   "context": { "thresholds": [0.8, 0.95], "notify": true },
   "memory":  { "autoSummary": true, "injectSystemPrompt": true, "maxInjectChars": 1600,
                "polishWithModel": false },
-  "coach":   { "enabled": true, "dwellSec": 30, "cooldownSec": 30, "idleMinutes": 5,
-               "dailyLimit": 120, "quietHours": [23, 8] },
+  "coach":   { "enabled": true, "dwellSec": 30, "idleMinutes": 5,
+               "dailyLimit": 6, "quietHours": [23, 8] },
+  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 40 },
   "privacy": { "paused": false, "apps": [], "titlePatterns": [],
                "cloudAllowlist": [], "unknownIsSensitive": true },
   "sensor":  { "enabled": true, "intervalMs": 5000 },
-  "vision":  { "enabled": false, "mode": "local", "intervalMs": 30000, "changeWindowMs": 120000,
+  "vision":  { "enabled": false, "mode": "ocr", "intervalMs": 30000, "changeWindowMs": 120000,
                "analyze": { "enabled": false, "endpoint": "", "model": "",
                             "apiKeyEnv": "OPENAI_API_KEY", "allApps": false } },
-  // mode="model" 且 analyze.enabled=true 时：每 dwellSec（30s）发一帧给视觉端点，文案来自模型
 }
 ```
 

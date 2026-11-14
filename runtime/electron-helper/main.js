@@ -806,9 +806,14 @@ app.whenReady().then(() => {
   ipcMain.handle('pet:capture-thumb', async (_event, options) => {
     try {
       if (!desktopCapturer) return null;
+      // 尺寸按用途给：只算哈希 640×360 足够；要做 OCR 就得给到 1600×900，
+      // 否则整屏缩到 1/4 后文字糊成一团（实跑踩到：OCR 返回 empty）。
+      const requested = Number(options && options.width);
+      const thumbWidth = Number.isFinite(requested) && requested > 0 ? Math.min(1920, Math.max(320, Math.round(requested))) : 640;
+      const thumbHeight = Math.round((thumbWidth * 9) / 16);
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: { width: 640, height: 360 },
+        thumbnailSize: { width: thumbWidth, height: thumbHeight },
         fetchWindowIcons: false,
       });
       // 优先主屏（id 形如 screen:0:0），退而求其次取第一块屏

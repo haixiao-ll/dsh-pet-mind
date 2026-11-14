@@ -105,6 +105,7 @@ import { listBalanceProviders, queryBalance, registerBalanceProvider } from './b
 import { automaticWhisperSchedule } from './whisper-policy';
 import { Mind, type MindConfig } from './mind/index';
 import type { WorkSummary } from './mind/memory';
+import { buildSuggestionPrompt, cleanSuggestion } from './mind/suggest';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
 import { limitPool, readMemePool, whisperMeme } from './memes';
@@ -1034,6 +1035,19 @@ export function apply(ctx: any): void {
     // 心智状态广播：写 S 的 sections.mind（浏览器画进度环、桌面 Helper 切待机都读它）。
     // 只写这一条叶子，不碰 pets.*——宠物本体的状态机完全不受心智层影响。
     publish: (view) => state.writeSection('mind', view),
+    // OCR 文本 → 一句建议：用**文本模型**（不需要多模态）。默认跟随当前对话模型，
+    // 想更轻/更便宜就在 mind.suggestion.model 里指定一个小模型。
+    suggest: async ({ text, app }) => {
+      const merged = readAllConfig(configPaths) as { main?: Record<string, unknown> };
+      const conf = merged.main ?? {};
+      const mindCfg = (conf.mind ?? {}) as MindConfig;
+      const preferred = mindCfg.suggestion?.model;
+      const sel = preferred && (preferred.provider || preferred.model) ? preferred : configuredModel(conf, 'chatModel');
+      const prompt = buildSuggestionPrompt({ text, app, maxChars: mindCfg.suggestion?.maxChars });
+      const result = await generateChat(ctx, prompt.system, [], prompt.user, [], sel);
+      if (!result.ok) return null;
+      return cleanSuggestion(result.text, prompt.maxChars);
+    },
     // 可选的模型润色（配置 memory.polishWithModel=true 才走）：把本地抽的骨架交给
     // 聊天模型整理成更通顺的摘要。**失败一律返回 null**，由 Mind 退回本地摘要——
     // 记忆是长期资产，不能因为一次模型调用失败就写一份空文档。

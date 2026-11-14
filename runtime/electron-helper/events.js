@@ -347,7 +347,8 @@ async function captureAndReport(id, withImage) {
   try {
     const bridge = window.petBridge;
     if (!bridge || typeof bridge.captureThumb !== 'function') return;
-    const frame = await bridge.captureThumb({ withImage: withImage === true });
+    // OCR 需要更清晰的帧（1600×900）；只算哈希时 640×360 就够，别浪费 CPU
+    const frame = await bridge.captureThumb({ withImage: withImage === true, width: withImage === true ? 1600 : 640 });
     if (!frame || typeof frame.hash !== 'string' || frame.hash === '') return;
     await fetch(BASE + '/mind/frame', {
       method: 'POST',
