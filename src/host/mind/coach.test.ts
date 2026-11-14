@@ -127,3 +127,25 @@ test('额度只在建议真的弹出后计入：due 通过但未 commit 时不�
   h.adv(31_000);
   assert.equal(h.coach.due(h.sample(), true, h.cfg), false);
 });
+
+test('失败重试：同一次停留最多 2 次，成功后封口', () => {
+  const h = harness({ dwellSec: 30 });
+  h.tick();
+  h.adv(31_000);
+  assert.equal(h.coach.due(h.sample(), true, h.cfg), true, '第一次尝试');
+  h.coach.failSuggestion();
+  h.adv(31_000);
+  assert.equal(h.coach.due(h.sample(), true, h.cfg), true, '失败后允许重试一次');
+  h.coach.failSuggestion();
+  h.adv(31_000);
+  assert.equal(h.coach.due(h.sample(), true, h.cfg), false, '超过 2 次不再试');
+
+  // 成功路径：commit 后同页永久封口
+  const h2 = harness({ dwellSec: 30 });
+  h2.tick();
+  h2.adv(31_000);
+  assert.equal(h2.coach.due(h2.sample(), true, h2.cfg), true);
+  h2.coach.commitSuggestion();
+  h2.adv(31_000);
+  assert.equal(h2.coach.due(h2.sample(), true, h2.cfg), false);
+});

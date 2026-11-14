@@ -264,6 +264,8 @@ export class Mind {
     const cfg = this.deps.getConfig();
     if (cfg.enabled === false) return;
     this.lastSample = sample;
+    // 上一次建议如果 20 秒还没回（Helper/OCR 卡住），视为失败，允许重试一次
+    this.coach.expireInFlight(sample.at, 20_000);
 
     // 待机只取决于 system idle，与"哪个窗口在前台"无关——所以先算它，
     // 否则桌宠自己被点成前台窗口时，人离开了也永远不会进入待机。
@@ -477,7 +479,11 @@ export class Mind {
       const job = kind === 'ocr' ? this.ocrAndSuggest(signal.dataUrl) : this.analyzeFrame(signal.dataUrl);
       void job.catch((error: unknown) => {
         this.deps.log(`建议生成失败：${(error as Error).message}`);
+        this.coach.failSuggestion();
       });
+    } else if (kind !== 'hash') {
+      // 请求了带图但没拿到（Helper 失败/超限）：记一次失败，允许到点再试
+      this.coach.failSuggestion();
     }
     if (result.ok && this.frameCount === 0) {
       // 只在第一帧说一次：这是用户确认"截帧链路真的通了"的最快信号（日志里只有哈希与尺寸）
@@ -504,19 +510,25 @@ export class Mind {
     const ocr = await ocrDataUrl(dataUrl);
     if (!ocr.ok) {
       this.deps.log(`OCR 未产出文字：${ocr.reason}`);
+      this.coach.failSuggestion();
       return;
     }
     if (ocr.text.length < 4) {
       this.deps.log('OCR 未产出可用文字（太短）');
+      this.coach.failSuggestion();
       return;
     }
     // 只记长度，不记内容：OCR 文本可能含屏幕上的隐私信息，日志里不该出现
     this.deps.log(`OCR 识别到 ${ocr.text.length} 字`);
     const app = this.lastSample?.app;
-    if (typeof this.deps.suggest !== 'function') return;
+    if (typeof this.deps.suggest !== 'function') {
+      this.coach.failSuggestion();
+      return;
+    }
     const text = await this.deps.suggest({ text: ocr.text, app });
     if (!text) {
       this.deps.log('建议模型未返回可用文案（不弹气泡）');
+      this.coach.failSuggestion();
       return;
     }
     this.lastSuggestion = { key: app ?? 'unknown', text, reason: 'dwell', at: Date.now() };
@@ -540,15 +552,20 @@ export class Mind {
     try {
       const cfg = this.deps.getConfig();
       const analyze = cfg.vision?.analyze ?? {};
-      if (analyze.enabled !== true) return;
+      if (analyze.enabled !== true) {
+        this.coach.failSuggestion();
+        return;
+      }
       const app = this.lastSample?.app;
       if (analyze.allApps !== true && !cloudAllowed(app, cfg.privacy ?? {})) {
         this.deps.log('视觉建议：应用不在 cloudAllowlist，画面未出本机');
+        this.coach.failSuggestion();
         return;
       }
       const result = await analyzeScreen({ imageDataUrl: dataUrl, app }, analyze);
       if (!result.ok) {
         this.deps.log(`视觉建议未生成：${result.reason}${result.detail ? '（' + result.detail + '）' : ''}`);
+        this.coach.failSuggestion();
         return;
       }
       this.lastSuggestion = { key: app ?? 'unknown', text: result.text, reason: 'dwell', at: Date.now() };

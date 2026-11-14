@@ -32,7 +32,8 @@ export function buildSuggestionPrompt(input: SuggestPromptInput): SuggestPrompt 
       '你是桌面宠物，正陪主人工作。下面是从主人屏幕 OCR 出来的文字（可能有错漏、乱码）。' +
       '请用一句中文给一条**具体**建议（不超过 40 字），要指向文字里真实出现的东西；' +
       '不要泛泛地说“休息一下”，不要复述整段，不要解释你在 OCR。' +
-      '如果内容涉及密码、支付、私聊等不宜评论的内容，只回复 SKIP。',
+      '如果内容涉及密码、支付、私聊等不宜评论的内容，只回复 SKIP。' +
+      '只做出建议，不做任何实际操作；不要调用工具、不要修改文件、不要执行命令。',
     user: ['前台应用：' + app + '。', '屏幕文字：', text].join(String.fromCharCode(10)),
     maxChars,
   };

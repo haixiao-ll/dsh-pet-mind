@@ -8,6 +8,8 @@ test('prompt：带应用名与 OCR 文本，且要求具体、允许 SKIP', () =
   assert.match(p.user, /前台应用：Code/);
   assert.match(p.user, /TS2339/);
   assert.match(p.system, /SKIP/);
+  // 用户要求：提示词最后必须约束"只做建议，不做实际操作"
+  assert.match(p.system, /只做出建议，不做任何实际操作/);
   assert.equal(p.maxChars, 30);
 });
 

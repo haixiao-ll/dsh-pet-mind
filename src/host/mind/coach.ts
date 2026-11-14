@@ -26,8 +26,10 @@ export interface CoachConfig {
   cooldownSec?: number;
   /** @deprecated 同上 */
   cooldownMinutes?: number;
-  /** 每天最多几条（默认 8） */
+  /** 每天最多几条（默认 6） */
   dailyLimit?: number;
+  /** 同一次停留最多尝试几次（默认 2 = 首次 + 失败重试 1 次） */
+  maxAttemptsPerStay?: number;
   /** 夜间免打扰时段 [开始小时, 结束小时)（默认 [23, 8)；跨越午夜） */
   quietHours?: readonly [number, number];
 }
@@ -83,8 +85,12 @@ export class Coach {
   /** 本次"停留"的键：应用 + 窗口标题（标题变化 = 新页面）。 */
   private stayKey = '';
   private staySince = 0;
-  /** 这次停留是否已经建议过（一次停留只打扰一次，这是核心语义） */
-  private staySuggested = false;
+  /** 这次停留是否已经成功建议过（成功即封口） */
+  private stayDone = false;
+  /** 这次停留已经尝试了几次（OCR/模型失败可以再来一次，但不超过 maxAttemptsPerStay） */
+  private stayAttempts = 0;
+  /** 有一次建议正在生成（防止并发/重复触发） */
+  private inFlight = false;
   private dayKey = '';
   private dayCount = 0;
   private readonly now: () => number;
@@ -132,7 +138,9 @@ export class Coach {
       // 新页面：重新计时、重新给一次机会
       this.stayKey = key;
       this.staySince = now;
-      this.staySuggested = false;
+      this.stayDone = false;
+      this.stayAttempts = 0;
+      this.inFlight = false;
       return false;
     }
 
@@ -143,7 +151,7 @@ export class Coach {
       return false;
     }
 
-    if (this.staySuggested) return false;
+    if (this.stayDone || this.inFlight) return false;
     if (now - this.staySince < this.dwellMs(cfg)) return false;
     if (this.isQuietHour(now, cfg)) return false;
 
@@ -155,14 +163,21 @@ export class Coach {
     }
     if (this.dayCount >= (cfg.dailyLimit ?? 6)) return false;
 
-    this.staySuggested = true;
+    const maxAttempts = Math.max(1, Number(cfg.maxAttemptsPerStay) || 2);
+    if (this.stayAttempts >= maxAttempts) return false;
+
+    this.stayAttempts += 1;
+    this.inFlight = true;
+    this.staySince = now; // 下一次尝试（如果失败）从这一刻起再数 30 秒
     // 注意：这里**不**给 dayCount 加一。OCR 读不出字 / 模型失败时不该白占当天额度，
     // 由调用方在气泡真的发出去之后调 commitSuggestion()。
     return true;
   }
 
-  /** 建议真的弹出来了才计入当日额度（失败/被 SKIP 不占额度） */
+  /** 建议真的弹出：封口 + 计入当日额度（失败不占额度） */
   commitSuggestion(): void {
+    this.inFlight = false;
+    this.stayDone = true;
     const day = new Date(this.now()).toDateString();
     if (day !== this.dayKey) {
       this.dayKey = day;
@@ -170,6 +185,17 @@ export class Coach {
     }
     this.dayCount += 1;
   }
+
+  /** 这次尝试失败（OCR 无字 / 模型报错 / SKIP）：允许到点后再试一次 */
+  failSuggestion(): void {
+    this.inFlight = false;
+  }
+
+  /** 卡住兜底：生成请求一直没回（Helper 挂了等），超过 staleMs 视为失败，别把这一页永久封死 */
+  expireInFlight(now = this.now(), staleMs = 20_000): void {
+    if (this.inFlight && now - this.staySince > staleMs) this.inFlight = false;
+  }
+
 
   /** 每 5 秒一条采样就调一次；返回建议（没有就 null）。本地文案模式走这里 */
   evaluate(sample: ActivitySample, canCapture: boolean, cfg: CoachConfig = {}): Suggestion | null {
