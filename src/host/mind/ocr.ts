@@ -145,11 +145,13 @@ function runPowerShell(script: string, timeoutMs: number): (base64: string) => P
  * @param dataUrl `data:image/jpeg;base64,...`（只认 jpeg/png）
  */
 export async function ocrDataUrl(dataUrl: string, options: OcrOptions = {}): Promise<OcrResult> {
-  if (process.platform !== 'win32') return { ok: false, reason: 'unsupported-platform' };
   const match = /^data:image\/(?:jpeg|jpg|png);base64,(.+)$/.exec(String(dataUrl ?? ''));
   if (!match) return { ok: false, reason: 'bad-image' };
   const base64 = match[1];
   if (base64.length === 0 || base64.length > 2_000_000) return { ok: false, reason: 'image-too-large' };
+  // 平台判断放在参数校验之后：非法 data URL 在哪个平台都应该报 bad-image；
+  // 注入执行器时（单测）跳过平台门，否则 Linux CI 永远到不了执行器。
+  if (!options.run && process.platform !== 'win32') return { ok: false, reason: 'unsupported-platform' };
 
   const timeoutMs = Math.min(20_000, Math.max(2_000, Number(options.timeoutMs) || 8_000));
   const script = ocrScriptPath();
