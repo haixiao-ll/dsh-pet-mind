@@ -114,3 +114,16 @@ test('dwellSec：30 秒触发；同一次停留不会再来第二次', () => {
   h.adv(31_000);
   assert.equal(h.tick(), null, '同一次停留只建议一次');
 });
+
+test('额度只在建议真的弹出后计入：due 通过但未 commit 时不占额度', () => {
+  const h = harness({ dwellSec: 30, dailyLimit: 6 });
+  h.tick();
+  h.adv(31_000);
+  assert.equal(h.coach.due(h.sample(), true, h.cfg), true, '到点应允许一次');
+  assert.equal(h.coach.countToday(), 0, '还没弹（OCR/模型可能失败）不占额度');
+  h.coach.commitSuggestion();
+  assert.equal(h.coach.countToday(), 1, '弹出后才计入');
+  // 同一次停留不会因为失败而重试（避免每 30 秒空转）
+  h.adv(31_000);
+  assert.equal(h.coach.due(h.sample(), true, h.cfg), false);
+});

@@ -816,8 +816,12 @@ app.whenReady().then(() => {
         thumbnailSize: { width: thumbWidth, height: thumbHeight },
         fetchWindowIcons: false,
       });
-      // 优先主屏（id 形如 screen:0:0），退而求其次取第一块屏
-      const primary = sources.find((s) => String(s.id).startsWith('screen:')) ?? sources[0];
+      // 多屏：截**光标所在那块屏**，不是永远截主屏——否则在副屏工作时 OCR 读到的是另一块屏。
+      const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+      const primary =
+        sources.find((s) => String(s.display_id) === String(cursorDisplay.id)) ??
+        sources.find((s) => String(s.id).startsWith('screen:')) ??
+        sources[0];
       const shot = primary && primary.thumbnail;
       if (!shot || shot.isEmpty()) return null;
       const size = shot.getSize();
@@ -826,7 +830,8 @@ app.whenReady().then(() => {
       // "屏幕变过 = 人在"就永远成立（待机形同虚设）。换算到缩略图坐标系再裁。
       let image = shot;
       try {
-        const display = screen.getPrimaryDisplay().bounds;
+        // 与上面选中的源保持同一块屏（否则裁剪坐标会错位）
+        const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds;
         const scaleX = display.width > 0 ? size.width / display.width : 1;
         const scaleY = display.height > 0 ? size.height / display.height : 1;
         const blockers = BrowserWindow.getAllWindows()

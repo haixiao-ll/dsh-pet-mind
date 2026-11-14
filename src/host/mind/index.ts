@@ -521,6 +521,7 @@ export class Mind {
     }
     this.lastSuggestion = { key: app ?? 'unknown', text, reason: 'dwell', at: Date.now() };
     this.deps.say(text);
+    this.coach.commitSuggestion();
     this.deps.log('建议已发送：ocr');
   }
 
@@ -552,6 +553,7 @@ export class Mind {
       }
       this.lastSuggestion = { key: app ?? 'unknown', text: result.text, reason: 'dwell', at: Date.now() };
       this.deps.say(result.text);
+      this.coach.commitSuggestion();
       this.deps.log('建议已发送：vision');
     } finally {
       this.analyzing = false;
