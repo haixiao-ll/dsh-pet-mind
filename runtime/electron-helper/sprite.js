@@ -221,7 +221,11 @@ class PetSprite {
     ringHole.className = 'pet-mind-ring__hole';
     this.ringText = document.createElement('span');
     this.ringText.className = 'pet-mind-ring__text';
+    this._lastPct = null;
+    this._flashTimer = null;
+    this._pointerInside = false;
     this.ring.append(this.ringDial, ringHole, this.ringText);
+    this.ring.style.left = Math.round(this.size * 0.6875 + 4) + 'px';
     stage.append(this.ring);
     // 显隐用指针事件（透明置顶窗/指针捕获下 CSS :hover 不可靠）
     for (const evt of ['pointerenter', 'mouseenter']) {
@@ -235,6 +239,7 @@ class PetSprite {
     window.addEventListener('mousemove', (e) => {
       const r = this.hit.getBoundingClientRect();
       const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      this._pointerInside = inside;
       this.ring.classList.toggle('is-hover', inside);
     });
     this.bubble = document.createElement('div');
@@ -739,6 +744,15 @@ class PetSprite {
     }
     const color = pct >= 0.95 ? '#f87171' : pct >= 0.8 ? '#fbbf24' : '#4ade80';
     this.ring.style.display = 'flex';
+    // 数据变化（含启动恢复）自动亮 10 秒：透明窗里指针不动时没有 mousemove，只靠 hover 会"有数据却看不见"
+    if (this._lastPct !== pct) {
+      this._lastPct = pct;
+      this.ring.classList.add('is-hover');
+      clearTimeout(this._flashTimer);
+      this._flashTimer = setTimeout(() => {
+        if (!this._pointerInside) this.ring.classList.remove('is-hover');
+      }, 10_000);
+    }
     this.ringDial.style.background =
       'conic-gradient(' + color + ' ' + pct * 360 + 'deg, rgba(255,255,255,.14) 0)';
     this.ringText.textContent = Math.round(pct * 100) + '%';

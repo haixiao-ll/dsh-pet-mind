@@ -168,7 +168,7 @@ const css = [
   //（462px ≈ 19% 舞台高），尾巴再往下探，头顶中央会被气泡盖住。
   // 这里放「角色右肩外侧」：水平贴身体右缘（身体宽 240/640 → 中线 +18.75%），
   // 垂直 26%（气泡带约 0–23% 以下）；只在悬停宠物时出现，移开淡出。
-  '.dsh-pet-mind-ring{position:absolute;left:calc(50% + var(--dsh-pet-size,462px)*0.1875 + 4px);top:28%;width:34px;height:34px;border-radius:50%;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.28);background:rgba(15,23,42,.55);backdrop-filter:blur(4px);opacity:0;transition:opacity .15s ease}',
+  '.dsh-pet-mind-ring{position:absolute;left:0;top:28%;width:34px;height:34px;border-radius:50%;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.28);background:rgba(15,23,42,.55);backdrop-filter:blur(4px);opacity:0;transition:opacity .15s ease}',
   '.dsh-pet-root:hover .dsh-pet-mind-ring,.dsh-pet-mind-ring.is-hover{opacity:1}',
   // 恢复的上一轮快照：灰度一点，提示「不是本轮实时数据」
   '.dsh-pet-mind-ring.is-stale{filter:grayscale(.55)}',
@@ -2417,19 +2417,29 @@ export function makePetUI(rt: {
     // ---- 心智层：上下文进度环（只有拿到百分比才渲染；窗口未知时宁可不显示）----
     // 显隐用 **JS 指针事件**而不是 CSS :hover：桌面透明窗/指针捕获下 :hover 不可靠。
     const [mindHover, setMindHover] = useState(false);
+    const [mindFlash, setMindFlash] = useState(false);
     const mindPct =
       mindContext && typeof mindContext.percent === 'number'
         ? Math.max(0, Math.min(1, mindContext.percent))
         : null;
     const mindTitle = ringTitle(mindContext ?? null);
+    // 数据更新（或启动恢复）后自动亮 10 秒：桌面透明窗里指针不动时不一定有 mousemove，
+    // 只靠 hover 会"有数据却看不见"。
+    useEffect(() => {
+      if (mindPct === null) return;
+      setMindFlash(true);
+      const timer = setTimeout(() => setMindFlash(false), 10_000);
+      return () => clearTimeout(timer);
+    }, [mindPct, mindContext?.at]);
     const mindRing =
       mindPct === null
         ? null
         : h('div', {
+            style: { left: Math.round(cfg.size * 0.6875 + 4) + 'px' },
             className:
                 'dsh-pet-mind-ring' +
                 (mindStandby ? ' is-standby' : '') +
-                (mindHover ? ' is-hover' : '') +
+                (mindHover || mindFlash ? ' is-hover' : '') +
                 (mindContext?.stale ? ' is-stale' : ''),
             title: mindTitle,
             'aria-label': mindTitle,
