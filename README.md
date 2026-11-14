@@ -35,13 +35,23 @@
 
 | 能力 | 它做什么 | 边界 |
 |---|---|---|
-| **上下文用量** | 从 DSH 的 `session/event` 读 `usage` 与 `contextWindow`，算子代理不算 | 只覆盖 DSH 会话；窗口未知时不显示 |
+| **上下文用量** | 从 DSH 的 `session/event` 读 `usage` 与 `contextWindow`（缺失时用 `llm.resolveModel`/配置补）；**右肩外侧环**：数据更新自动亮 10 秒 + 悬停常显 | 只覆盖 DSH 会话；窗口未知时不画；重启先显示上一轮快照（灰度） |
 | **工作记忆** | 到阈值把最近对话抽成 Markdown（本地抽取，零 token），写进 `memory/work/` | 抽取式，不是"完全理解"；可能漏要点 |
 | **陪伴记忆** | 只记称呼/偏好/约定，写进 `memory/companion/` | 启发式触发，可能误记/漏记 |
 | **记忆注入** | 把 `INDEX.md` 注入系统提示词，新会话/子支线能续上 | 有长度上限；会占用一点上下文 |
 | **专注建议** | 进入新页面 30 秒 → 本地 OCR → 文字交给**你的文本模型** → 一句话建议 | 每页只一次、每天 6 条、失败重试一次；**只建议，不操作** |
 | **待机** | 人不在（空闲 ≥5 分钟且屏幕未变化）→ 只播待机、碎碎念静音 | Windows 专用；误判可能发生 |
 | **隐私闸门** | 微信/支付宝/网银/密码管理器/远程桌面 + 标题兜底 + 识别不出即拒绝 | 不是万无一失，见 [PRIVACY](docs/PRIVACY.md) |
+
+### 最近修了什么（0.5.2 – 0.5.7，都是实测踩出来的）
+
+- **0.5.2**：DSH 事件载荷在 `event.data` 里，之前读顶层 → 上下文恒为 null、工作记忆写不出来；
+- **0.5.3**：重启后 DSH 不再发 `request/context` → 用 `llm.resolveModel` + `windowTokens` 补窗口；
+- **0.5.4/0.5.5**：环改到右肩外侧（避开气泡）、悬停显示；透明窗里 CSS `:hover` 不可靠，改用指针/鼠标事件；
+- **0.5.6**：冷启动先恢复上一轮快照（`mind-state.json`，只有 token 数），标灰显示；
+- **0.5.7**：`calc()` 里的乘法被 Chromium 丢弃导致环"有数据不显示" → 位置改 JS 像素；数据变化自动亮 10 秒。
+
+完整逐条见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 做不到什么（先看这里）
 
@@ -60,6 +70,25 @@
 
 完整清单见 [docs/LIMITATIONS.md](docs/LIMITATIONS.md)。
 
+## 已知问题（不粉饰）
+
+- **重启后要等一轮回复才有实时数字**：计量只吃实时事件，不回放历史。0.5.6 起会先显示上一轮快照（灰度）顶一下；
+- **环不是所有时候都在**：默认"数据变化亮 10 秒 + 悬停常显"，避免一直挡视线；想让常驻可以提 issue；
+- **建议可能不来**：没字/敏感应用/夜间免打扰/当天 6 条用完，都会静默；
+- **OCR 质量依赖系统**：远程桌面、深色主题、小字号、游戏/视频可能读不出；
+- **模型可能编**：建议只是一句话参考，不要当结论。
+
+## 运行要求
+
+| 项 | 要求 |
+|---|---|
+| 宿主 | DeepSeek Harness（桌面 Electron 版或 `dsh web`）；插件用到的宿主服务：`webServer`、`agentDefaultModel`、`credentials`、`llm`、`commands`、`connection` |
+| 系统 | 桌面感知/OCR **仅 Windows 10/11**；其他平台桌宠可用，心智层的感知部分自动降级 |
+| OCR | Windows 自带 OCR 需安装**中文语言包**（设置 → 时间和语言 → 语言 → 中文 → 可选功能） |
+| 模型 | 需要 DSH 里已配置可用的对话模型；建议使用你在用的文本模型（`suggestion.model` 留空 = 跟随对话模型） |
+| 权限 | 不需要管理员权限；提权窗口读不到标题，会直接不采集 |
+| 构建 | Node ≥ 22.12（仅从源码构建时需要；装 tgz 不需要） |
+
 ## 安装
 
 **没有发布到 npm**。用本地 tgz（[Releases](../../releases) 或 `npm pack` 产物）：
@@ -69,7 +98,7 @@
 "...\dsh.cmd" plugin --profile desktop remove @tuweizhi/dsh-pet
 
 :: 2) 装本包
-"...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.1.tgz"
+"...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.7.tgz"
 
 :: 3) 完全退出 DSH 再启动（不要在运行中热装后指望立即生效）
 ```
@@ -144,6 +173,7 @@ node lib/standalone.js
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：目录、构建、**与 DSH 的连接点**、IntelliJ 打开与调试、扩展指南
 - [docs/MIND.md](docs/MIND.md)：心智层设计、OCR 链路、策略与隐私
+- [docs/TESTING.md](docs/TESTING.md)：0.5.7 实测记录（上下文/记忆/OCR/待机/隐私）与未覆盖项
 - [docs/PRIVACY.md](docs/PRIVACY.md)：数据清单、出网边界、保留期、法律依据、用户控制
 - [docs/LIMITATIONS.md](docs/LIMITATIONS.md)：做不到什么（能力边界）
 - [docs/LEGAL.md](docs/LEGAL.md)：许可、素材、商标、个人信息与免责

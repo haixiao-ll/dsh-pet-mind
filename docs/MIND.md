@@ -45,13 +45,20 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 
 **在哪看**：
 
-- **宠物头顶的进度环**（浏览器 overlay 与桌面透明窗**两端都有**；随宠物移动，悬停显示 `已用 63%（80k / 128k tokens）`）：
-  绿 `<80%`、琥珀 `80–95%`、红 `≥95%`，与提醒档位同一套阈值；待机时环变暗。
-  浏览器每 10 秒从 `/mind/state` 拉一次（上下文是慢变量）；桌面端读 `sections.mind` 叶子（与其它状态同一条桥）。
+- **宠物右肩外侧的进度环**（浏览器 overlay 与桌面透明窗两端都有；水平贴身体右缘、垂直 28%，避开头顶气泡带）：
+  绿 `<80%`、琥珀 `80–95%`、红 `≥95%`，与提醒档位同一套阈值。
+  显示规则：**数据变化（含启动恢复）自动亮 10 秒 + 悬停常显**，移开/超时淡出；
+  桌面端用指针事件 + 全局 mousemove 命中区兜底（透明窗里 CSS `:hover` 不可靠）。
 - `GET /dsh-pet-7340/mind/context`（或 `/mind/state`）。
 
-> 环只在**拿到百分比**时出现：窗口未知（宿主没上报 `contextWindow`）时宁可不显示，
-> 也不拿 0 假装"完全空闲"。
+> 环只在**拿到百分比**时出现：窗口未知时不画，也不拿 0 假装"完全空闲"。
+
+**数据来源与冷启动**：DSH 的事件形状是 `{ type, seq, time, data }`，`usage`/`contextWindow`
+都在 `data` 里；计量只吃实时 `session/event`（不回放历史）。所以重启后要等这一轮回复结束才有实时数字；
+0.5.6 起会把上一轮快照写入 `$DSH_HOME/dsh-pet/mind-state.json`（只含 token 数/窗口/模型名），
+启动时恢复并以**灰度 + 「上次记录，等待本轮数据」**提示，本轮 usage 到达即替换。
+DSH 只在路由/容量变化时才发 `request/context`，窗口缺失时用 `llm.resolveModel(provider, model)` 兜底，
+再不行才用配置 `mind.context.windowTokens` 手动指定。
 
 ---
 

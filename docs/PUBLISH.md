@@ -139,6 +139,7 @@ CI 里的 `Release` workflow 默认**只打包、不发布**（上传 tgz artifa
 - [ ] `NOTICE.md` 写清了来源链与 0.5.x 的改动
 - [ ] `THIRD-PARTY-NOTICES.md` 里字体/表情包的状态你确认过（不确定就删掉 `assets/memes` 与 `assets/fonts`）
 - [ ] `docs/PRIVACY.md` 与 `docs/LEGAL.md` 的合规提示符合你的发布场景
+- [ ] `docs/TESTING.md` 的实测记录与当前版本一致（至少覆盖：上下文、工作/陪伴记忆、OCR 建议、待机、隐私闸门）
 - [ ] `SECURITY.md` / `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` 已随仓库发布
 - [ ] README 的"做不到什么"没有夸大能力（不要宣称"懂你在干什么""自动操作"）
 - [ ] `docs/ARCHITECTURE.md` 里的仓库地址/包名换成了你的
