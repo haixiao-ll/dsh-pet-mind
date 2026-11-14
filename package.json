@@ -20,13 +20,13 @@
     "privacy",
     "local-first"
   ],
-  "homepage": "https://github.com/your-id/dsh-pet-mind#readme",
+  "homepage": "https://github.com/haixiao-ll/dsh-pet-mind#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-id/dsh-pet-mind.git"
+    "url": "git+https://github.com/haixiao-ll/dsh-pet-mind.git"
   },
   "bugs": {
-    "url": "https://github.com/your-id/dsh-pet-mind/issues"
+    "url": "https://github.com/haixiao-ll/dsh-pet-mind/issues"
   },
   "_comment": [
     "=============== 包清单说明（中文注释） ===============",

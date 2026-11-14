@@ -91,6 +91,14 @@
 
 **没有发布到 npm**。用本地 tgz（[Releases](../../releases) 或 `npm pack` 产物）：
 
+**直接安装：**
+
+1）安装前要先卸载之前版本，重新启动dsh软件。
+
+2）直接安装，在dsh软件直接用本地 tgz 安装,在插件页面输入"路径\dsh-pet-mind-0.5.0.tgz"点击安装。
+
+<p align="center"><img src="./docs/2026-11-15%20014659.jpg" ></p>
+
 ```bat
 :: 1) 旧插件与本插件共用 entry id dsh-pet，先卸旧的
 "...\dsh.cmd" plugin --profile desktop remove @tuweizhi/dsh-pet
