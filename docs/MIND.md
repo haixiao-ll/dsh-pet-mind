@@ -167,7 +167,7 @@ DSH 只在路由/容量变化时才发 `request/context`，窗口缺失时用 `l
 
 ### 4.5 截帧（默认关闭，只存在于内存）
 
-`mind.vision.enabled=true` 后，桌面 Helper 每 `intervalMs`（默认 30s）做一次：
+`vision.enabled` **出厂默认 true**（设 false 即完全不碰像素）。桌面 Helper 在每次停留到期时做一次：
 
 1. 主进程 `desktopCapturer.getSources` 拿一张 **640×360 缩略图**（只在内存）；
 2. **先把桌宠自己的窗口从画面里裁掉**（`capture-region.js`：按窗口矩形取面积最大的那一侧）。
@@ -195,17 +195,7 @@ Helper 截帧（OCR 模式用 1600×900，缩到 640×360 文字会糊）→ bas
   → 一句建议 → 气泡
 ```
 
-配置：
-
-```jsonc
-"mind": {
-  "coach": { "dwellSec": 30, "dailyLimit": 6 },
-  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 120 },
-  "vision": { "enabled": true, "mode": "ocr" }
-}
-```
-
-要点：
+这些默认值随包发布（`assets/config.jsonc`），**不需要用户手写配置**。要点：
 
 - **画面不出本机**：OCR 是系统组件，图片只经过内存；出网的只有"识别出的文字 + 应用名"，
   而且是交给**你自己选的文本模型**（和普通对话同一套凭证）；
@@ -238,37 +228,3 @@ Helper 截帧（OCR 模式用 1600×900，缩到 640×360 文字会糊）→ bas
 | POST | `/dsh-pet-7340/mind/pause?paused=1` | 暂停/恢复采集（内存态，重启复位） |
 
 ---
-
-## 6. 配置速查（`mind` 段）
-
-```jsonc
-"mind": {
-  "enabled": true,
-  "context": { "thresholds": [0.8, 0.95], "notify": true },
-  "memory":  { "autoSummary": true, "injectSystemPrompt": true, "maxInjectChars": 1600,
-               "polishWithModel": false },
-  "coach":   { "enabled": true, "dwellSec": 30, "idleMinutes": 5,
-               "dailyLimit": 6, "quietHours": [23, 8] },
-  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 120 },
-  "privacy": { "paused": false, "apps": [], "titlePatterns": [],
-               "cloudAllowlist": [], "unknownIsSensitive": true },
-  "sensor":  { "enabled": true, "intervalMs": 5000 },
-  "vision":  { "enabled": false, "mode": "ocr", "intervalMs": 30000, "changeWindowMs": 120000,
-               "analyze": { "enabled": false, "endpoint": "", "model": "",
-                            "apiKeyEnv": "OPENAI_API_KEY", "allApps": false } },
-}
-```
-
-全部可省略；写错类型按默认跑（不报错、不中断桌宠）。
-
----
-
-## 7. 以后可以怎么长
-
-已经留好的扩展点：
-
-- **新传感器**：`src/host/mind/sensors/` 加一个模块，返回 `start/stop`，在 `index.ts` 装配；
-- **新建议策略**：`coach.ts` 里加规则（注意冷却/每日上限/免打扰要一起考虑）；
-- **模型润色摘要**：`summarize()` 里替换 summary 对象，配置加开关；
-- **视觉**：`privacy.cloudAllowlist` + 一次显式点击 + 单帧，接口在 `sensors/` 里预留；
-- **客户端展示**：`/mind/state` 已经是给 UI 用的聚合视图，加卡片只动 `src/client/settings.ts`。

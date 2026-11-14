@@ -24,8 +24,8 @@
 | 模式 | 谁会离开本机 |
 |---|---|
 | `mind.enabled=false` | 无（整层不启动） |
-| `vision.enabled=false`（默认） | 无（连截帧都不做） |
-| `vision.mode="ocr"` | **只有 OCR 文字 + 前台应用名**，发给你配置的文本模型 |
+| `vision.enabled=false`（手动关闭后） | 无（连截帧都不做） |
+| `vision.enabled=true` + `mode="ocr"`（**出厂默认**） | **只有 OCR 文字 + 前台应用名**，发给你配置的文本模型；图像不离开 |
 | `vision.mode="model"`（可选，默认关） | 一帧 JPEG（640/1600 宽）+ 应用名，发给你配置的视觉端点 |
 
 - `mode:"ocr"` 下**图像永不离开本机**：截图 → 内存 → 本地 OCR → 丢弃；
@@ -37,7 +37,7 @@
 | 想要 | 怎么做 |
 |---|---|
 | 整层关闭 | `mind.enabled=false`，或设置页关掉相关开关（如已暴露） |
-| 不碰像素 | 保持 `vision.enabled=false`（默认） |
+| 不碰像素 | 设 `vision.enabled=false`（默认是开的，帧只在内存且只截一帧） |
 | 临时停止采集 | 设置页「隐私暂停」按钮，或 `POST /dsh-pet-7340/mind/pause?paused=1` |
 | 追加敏感应用 | `mind.privacy.apps` / `titlePatterns` |
 | 清空记忆 | 删除 `$DSH_HOME/dsh-pet/memory/`（工作+陪伴+索引一起清） |

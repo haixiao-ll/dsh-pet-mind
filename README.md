@@ -1,4 +1,4 @@
-# dsh-pet-mind 🐾 桌宠 + 心智层（0.5.7）
+# dsh-pet-mind 🐾 桌宠 + 心智层（0.5.8）
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-orange">
@@ -57,8 +57,8 @@
 
 - **不能真正"读懂"你在干什么。** OCR 只把屏幕上的**文字**读出来；它不理解图片、图表、视频、
   软件界面结构，也不知道你的意图。建议来自"这段文字 + 应用名"，模型可能理解偏、甚至编造。
-- **不能"看着你"做出判断。** 默认不截屏；即使开启 OCR 模式，也只在停留到期时截**一帧**（内存），
-  立即转文字后丢弃。没有持续画面、没有视觉理解。
+- **不能"看着你"做出判断。** 默认是 OCR 模式：只在停留到期时截**一帧**（内存），
+  立即转文字后丢弃；没有持续画面、没有视觉理解。可设 `vision.enabled=false` 完全关掉。
 - **不能执行任何操作。** 不点鼠标、不敲键盘、不调工具、不改文件；提示词里明确要求"只做建议"。
 - **不能识别密码框。** 外部程序无法可靠判断别的应用里是否在输入密码；只能靠应用名单 + 窗口标题 +
   手动暂停（"隐私暂停"）。提权窗口读不到标题 → 直接不采。
@@ -98,7 +98,7 @@
 "...\dsh.cmd" plugin --profile desktop remove @tuweizhi/dsh-pet
 
 :: 2) 装本包
-"...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.7.tgz"
+"...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.8.tgz"
 
 :: 3) 完全退出 DSH 再启动（不要在运行中热装后指望立即生效）
 ```
@@ -114,45 +114,24 @@ node lib/standalone.js --check
 node lib/standalone.js
 ```
 
-## 配置（`mind` 段）
+## 开箱默认（不需要手写配置）
 
-用户配置在 `$DSH_HOME/dsh-pet/main-config.jsonc`（Windows：`%USERPROFILE%\.dsh\dsh-pet\`）：
-
-```jsonc
-"mind": {
-  "enabled": true,
-  "coach": {
-    "enabled": true,
-    "dwellSec": 30,            // 进入新页面多久后建议一次
-    "dailyLimit": 6,           // 全局每天最多几条（只计真正弹出的）
-    "maxAttemptsPerStay": 2,   // 失败重试一次
-    "idleMinutes": 5,          // 空闲多久算"人不在"
-    "quietHours": [23, 8]      // 免打扰
-  },
-  "suggestion": {
-    "model": { "provider": "", "model": "" },  // 留空 = 与「对话」同一模型
-    "maxChars": 120
-  },
-  "vision": {
-    "enabled": false,          // 默认关闭；开启后才有截帧/OCR
-    "mode": "ocr"              // ocr=本地 OCR；local=只算哈希；model=云端视觉（可选，默认关）
-  }
-}
-```
-
-全部字段带中文注释的出厂默认见 [`assets/config.jsonc`](assets/config.jsonc)。
+装好即用，心智层默认已开启：本地 OCR 建议（画面不出本机）、进入新页面 30 秒后建议一次、
+每天最多 6 条、失败重试一次、23:00–08:00 免打扰、文案上限 120 字、上下文窗口自动识别。
+**不要往 `main-config.jsonc` 里贴任何 `mind` 配置**；只有想改节奏/关掉采集时才需要动
+[`assets/config.jsonc`](assets/config.jsonc) 里的带注释字段（高级用法）。
 
 ## 隐私与数据流（摘要）
 
 | 数据 | 在哪 | 是否离开本机 |
 |---|---|---|
-| 屏幕帧（仅在 `vision.enabled` 时） | Helper 内存 → 本地 OCR → 丢弃 | **不离开**（`mode:"ocr"`） |
+| 屏幕帧（默认开启，仅停留到期截一帧） | Helper 内存 → 本地 OCR → 丢弃 | **不离开**（`mode:"ocr"`） |
 | OCR 文字 + 前台应用名 | 内存 → 交给**你配置的**文本模型 | **会**，只发给你选的服务商 |
 | 窗口标题 | 内存，仅用于隐私判定 | 不落盘、不发网络 |
 | 记忆 `memory/*.md` | `$DSH_HOME/dsh-pet/memory/` | 不离开，除非你把它提交/同步 |
 | 配置 | `main-config.jsonc` | 不离开 |
 
-控制手段：`mind.enabled=false` 整层关闭；`vision.enabled=false` 不碰像素；
+控制手段：`mind.enabled=false` 整层关闭；`vision.enabled=false` 完全不碰像素；
 设置页「隐私暂停」或 `mind.privacy.paused=true` 立即停采；删除 `memory/` 即清空记忆。
 完整说明（含法律依据与保留期）见 [docs/PRIVACY.md](docs/PRIVACY.md)。
 

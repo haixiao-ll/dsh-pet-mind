@@ -7,7 +7,7 @@
 
 ## 0. 准备
 
-- 包：`E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.7.tgz`（`npm pack` 产物）
+- 包：`E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.8.tgz`（`npm pack` 产物）
 - 桌面应用自带 CLI（你这台机器的路径）：
   `D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`
 - 建议先备份：`%USERPROFILE%\.dsh\dsh-pet\`（配置 + 记忆）
@@ -24,47 +24,25 @@
 ## 2. 安装本包
 
 ```bat
-"D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.7.tgz"
+"D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.8.tgz"
 ```
 
 装完检查 `C:\Users\admin\.dsh\profiles\desktop\package.json`：
 
 ```jsonc
-"dependencies": { "dsh-pet-mind": "file:../../../idea-workspase/dsh-pet-main/dsh-pet-mind-0.5.7.tgz" },
+"dependencies": { "dsh-pet-mind": "file:../../../idea-workspase/dsh-pet-main/dsh-pet-mind-0.5.8.tgz" },
 "dsh": { "profile": { "bundles": [ ..., "dsh-pet-mind" ] } }
 ```
 
 > 正常情况下 `plugin add` 会把它写进 `bundles`；**如果没写**，手动在 `bundles` 末尾加一行 `"dsh-pet-mind"`，
 > 否则插件不会进配置树（桌宠不出现、也没有任何报错，这是最容易漏的一步）。
 
-## 3. 打开心智层（默认是关的）
+## 3. 心智层（默认已开，不用配）
 
-编辑 `C:\Users\admin\.dsh\dsh-pet\main-config.jsonc`，加/改 `mind` 段（注意 JSONC 允许注释）：
+**不需要编辑 `main-config.jsonc`。** 出厂默认已开启：本地 OCR 建议、30 秒/每页一次、每天 6 条、
+失败重试一次、23:00–08:00 免打扰、文案上限 120 字、窗口自动识别。
 
-```jsonc
-"mind": {
-  "enabled": true,
-  "coach": {
-    "enabled": true,
-    "dwellSec": 30,
-    "dailyLimit": 6,
-    "idleMinutes": 5,
-    "maxAttemptsPerStay": 2,
-    "quietHours": [0, 0]     // 现在是 23 点，先设 [0,0] 关掉免打扰才能立刻看到效果；正式用改回 [23, 8]
-  },
-  "suggestion": {
-    "model": { "provider": "", "model": "" },  // 留空 = 与「对话」用同一个模型
-    "maxChars": 40
-  },
-  "vision": {
-    "enabled": true,
-    "mode": "ocr"            // 本地 OCR → 文字 → 文本模型；画面不出本机
-  }
-}
-```
-
-> `mind` 段是**透传字段**：设置页点「保存」不会把它冲掉；但点「同步」（用内置默认整份覆盖）会重置，
-> 届时把上面这段再贴回去。
+想关掉或调节奏时，才需要动 `assets/config.jsonc` 里带注释的字段（或者设置页的开关/隐私暂停）。
 
 ## 4. 重启桌面应用（**必须完全退出**）
 
@@ -96,7 +74,7 @@
 
 | 日志/现象 | 原因与处理 |
 |---|---|
-| 没有 `截帧链路已通` | `vision.enabled` 没开 / 插件没进 bundles / Helper 没起来 |
+| 没有 `截帧链路已通` | `vision.enabled` 被手动关了 / 插件没进 bundles / Helper 没起来 |
 | `OCR 未产出文字：no-engine` | 系统缺 OCR 语言包（设置 → 时间和语言 → 语言 → 中文 → 可选功能） |
 | `OCR 未产出文字：empty` | 画面太小/太糊/纯图无字（视频、游戏） |
 | `OCR 未产出文字：timeout` | PowerShell 被杀或系统卡；重试一次仍失败就跳过该页 |
