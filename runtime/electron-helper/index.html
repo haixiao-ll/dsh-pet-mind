@@ -64,12 +64,14 @@
       }
       /* 心智层：上下文进度环（与浏览器端同一视觉）。纯展示，pointer-events:none，
          不参与命中区计算，也不会让透明窗变成可点击区。 */
+      /* 角色右肩外侧（气泡带约 0–23% 舞台高，放 26% 以下避开）；
+         只在悬停宠物时出现，鼠标移开淡出 */
       .pet-mind-ring {
         position: absolute;
-        top: 4%;
-        right: 4%;
-        width: 40px;
-        height: 40px;
+        left: calc(50% + var(--pet-size, 462px) * 0.1875 + 4px);
+        top: 28%;
+        width: 34px;
+        height: 34px;
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -78,10 +80,11 @@
         background: rgba(15, 23, 42, 0.55);
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
         pointer-events: none;
-        transition: opacity 0.2s ease;
+        opacity: 0;
+        transition: opacity 0.15s ease;
       }
-      .pet-mind-ring.is-standby {
-        opacity: 0.55;
+      .pet-sprite:hover .pet-mind-ring {
+        opacity: 1;
       }
       .pet-mind-ring__dial {
         position: absolute;

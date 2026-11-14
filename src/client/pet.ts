@@ -164,10 +164,12 @@ const css = [
   // 宠物就不跟手指走；两条 -webkit-* 抑制长按选中与 iOS 长按呼出系统菜单
   '.dsh-pet-hit{position:absolute;pointer-events:auto;cursor:url("/dsh-pet-7340/pic/cursor-grab.png") 16 16, grab;z-index:1;touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}',
   '.dsh-pet-hit.dragging{cursor:url("/dsh-pet-7340/pic/cursor-grabbing.png") 16 16, grabbing}',
-  // 心智层：上下文用量环（悬停在宠物身上可见，不抢操作）。放在舞台右上角，跟随宠物移动。
-  '.dsh-pet-mind-ring{position:absolute;top:4%;right:4%;width:40px;height:40px;border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.28);background:rgba(15,23,42,.55);backdrop-filter:blur(4px);transition:opacity .2s ease}',
-  '.dsh-pet-mind-ring:hover{background:rgba(15,23,42,.8)}',
-  '.dsh-pet-mind-ring.is-standby{opacity:.55}',
+  // 心智层：上下文用量环。**不能放头顶中央**：气泡底边固定在「舞台顶下方 size×0.108」处
+  //（462px ≈ 19% 舞台高），尾巴再往下探，头顶中央会被气泡盖住。
+  // 这里放「角色右肩外侧」：水平贴身体右缘（身体宽 240/640 → 中线 +18.75%），
+  // 垂直 26%（气泡带约 0–23% 以下）；只在悬停宠物时出现，移开淡出。
+  '.dsh-pet-mind-ring{position:absolute;left:calc(50% + var(--dsh-pet-size,462px)*0.1875 + 4px);top:28%;width:34px;height:34px;border-radius:50%;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.28);background:rgba(15,23,42,.55);backdrop-filter:blur(4px);opacity:0;transition:opacity .15s ease}',
+  '.dsh-pet-root:hover .dsh-pet-mind-ring{opacity:1}',
   '.dsh-pet-mind-ring__text{position:relative;font:600 10px/1 ui-sans-serif,system-ui;color:#e5e7eb;letter-spacing:-.2px;pointer-events:none}',
   '@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
   // 统一右键菜单样式（与桌面注入同一份 MENU_CSS）
