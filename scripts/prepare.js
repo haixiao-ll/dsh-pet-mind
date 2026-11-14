@@ -76,6 +76,9 @@ const keep = [
   'NOTICE.md',
   'CHANGELOG.md',
   'THIRD-PARTY-NOTICES.md',
+  'SECURITY.md',
+  'CONTRIBUTING.md',
+  'CODE_OF_CONDUCT.md',
   'docs',
 ];
 writeFileSync(PKG, JSON.stringify({ ...pkg, files: keep }, null, 2) + '\n', 'utf8');

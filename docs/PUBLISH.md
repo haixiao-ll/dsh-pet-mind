@@ -136,8 +136,11 @@ CI 里的 `Release` workflow 默认**只打包、不发布**（上传 tgz artifa
 - [ ] `npm test` 全绿
 - [ ] `npm run build` 后 `lib/` 三份产物都在
 - [ ] `LICENSE` 保留上游两段版权行，并追加了你自己的
-- [ ] `NOTICE.md` 写清了来源链与 0.5 的改动
-- [ ] `THIRD-PARTY-NOTICES.md` 里字体/表情包的状态你确认过（不确定就换素材）
+- [ ] `NOTICE.md` 写清了来源链与 0.5.x 的改动
+- [ ] `THIRD-PARTY-NOTICES.md` 里字体/表情包的状态你确认过（不确定就删掉 `assets/memes` 与 `assets/fonts`）
+- [ ] `docs/PRIVACY.md` 与 `docs/LEGAL.md` 的合规提示符合你的发布场景
+- [ ] `SECURITY.md` / `CONTRIBUTING.md` / `CODE_OF_CONDUCT.md` 已随仓库发布
+- [ ] README 的"做不到什么"没有夸大能力（不要宣称"懂你在干什么""自动操作"）
 - [ ] `docs/ARCHITECTURE.md` 里的仓库地址/包名换成了你的
 - [ ] 第一次 push 后 GitHub Actions 的 CI 是绿的
 

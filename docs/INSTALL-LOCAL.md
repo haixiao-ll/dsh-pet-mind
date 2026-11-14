@@ -7,10 +7,11 @@
 
 ## 0. 准备
 
-- 包：`E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.0.tgz`（`npm pack` 产物）
+- 包：`E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.1.tgz`（`npm pack` 产物）
 - 桌面应用自带 CLI（你这台机器的路径）：
   `D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`
 - 建议先备份：`%USERPROFILE%\.dsh\dsh-pet\`（配置 + 记忆）
+- 能力边界：[LIMITATIONS](LIMITATIONS.md)；数据流与合规：[PRIVACY](PRIVACY.md)、[LEGAL](LEGAL.md)
 
 ---
 
@@ -23,13 +24,13 @@
 ## 2. 安装本包
 
 ```bat
-"D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.0.tgz"
+"D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.1.tgz"
 ```
 
 装完检查 `C:\Users\admin\.dsh\profiles\desktop\package.json`：
 
 ```jsonc
-"dependencies": { "dsh-pet-mind": "file:../../../idea-workspase/dsh-pet-main/dsh-pet-mind-0.5.0.tgz" },
+"dependencies": { "dsh-pet-mind": "file:../../../idea-workspase/dsh-pet-main/dsh-pet-mind-0.5.1.tgz" },
 "dsh": { "profile": { "bundles": [ ..., "dsh-pet-mind" ] } }
 ```
 
@@ -65,7 +66,10 @@
 > `mind` 段是**透传字段**：设置页点「保存」不会把它冲掉；但点「同步」（用内置默认整份覆盖）会重置，
 > 届时把上面这段再贴回去。
 
-## 4. 重启桌面应用
+## 4. 重启桌面应用（**必须完全退出**）
+
+> 热装（应用还开着就 `plugin add`）可能报 `require(...) is not a function` 或"入口未激活"。
+> 正确做法：托盘退出 → 任务管理器确认没有 `DeepSeek Harness.exe` → 再启动。
 
 重启后看 DSH 控制台（或 `%APPDATA%\DeepSeek Harness\logs` 里最新的日志）：
 
