@@ -50,6 +50,10 @@ npm test
 
 ## 2. 推到 GitHub
 
+> **推荐顺序：先 GitHub，再 npm。** npm 不强制要求仓库已公开，但 `package.json` 里的
+> `repository/homepage/bugs` 指向 GitHub；先推仓库再发 npm，npm 页面上的链接、Issue 入口、
+> CI 徽章才是通的。反过来也能发，只是元数据会先坏一段时间。
+
 ### 2.1 建仓库
 
 网页建一个空仓库（**不要**勾 README/.gitignore/LICENSE，会和本地冲突），记下地址：
@@ -147,10 +151,24 @@ npm publish --dry-run     # 只打包、不发布，检查文件清单与体积
 
 ### 4.4 发布
 
+**方式 A：终端（推荐）**
+
 ```sh
 npm publish               # 未加 scope，默认 public
 # 有 2FA 会提示输入一次性验证码
 ```
+
+**方式 B：在 IntelliJ IDEA 里发（底层仍是终端）**
+
+1. IDEA 打开仓库根目录，按 `Alt+F12` 打开 **Terminal**（IDEA 自带，工作目录就是项目根）；
+2. 先确认登录：`npm whoami`；没登录就 `npm login`（会打开浏览器；2FA 账号按提示输入验证码）；
+3. 预检：`npm publish --dry-run`（应看到 `+ dsh-pet-mind@0.5.0`，无报错）；
+4. 正式发：`npm publish`，2FA 时输入 OTP；
+5. 发布完 `npm view dsh-pet-mind version` 验证。
+
+> IDEA 的 npm 工具窗（右键 `package.json` → *Show npm Scripts*）能跑 `prepack` 等脚本，
+> 但 `npm login` / OTP 是交互式的，建议统一在 Terminal 里做。
+> 也可以在 IDEA 里 `Ctrl+Alt+S → Tools → Terminal` 确认 shell 是 PowerShell/cmd。
 
 - `prepack` 会自动跑 `build + typecheck + prepack-check`，任何一步失败都会**阻止发布**；
 - 不要用 `--force` 跳过；
