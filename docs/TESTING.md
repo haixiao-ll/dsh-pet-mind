@@ -1,4 +1,4 @@
-# 实测记录（0.5.7）
+# 实测记录（0.5.0）
 
 > 目的：把"能跑"变成"可复现的证据"。本页记录一次真实环境的功能验证，命令与结果都可照着做。
 > 验证范围仅限当时的机器与模型，不代表所有环境；未覆盖项在文末列出。
@@ -10,7 +10,7 @@
 | 日期 | 2026-11-15 |
 | 系统 | Windows 11，双屏 2560×1390，缩放 100% |
 | 宿主 | DeepSeek Harness 桌面版（Electron），Web 端口以实际为准 |
-| 插件 | `dsh-pet-mind` 0.5.7（本地 tgz 安装） |
+| 插件 | `dsh-pet-mind` 0.5.0（本地 tgz 安装） |
 | 模型 | `deepseek-account / deepseek-flash`，上下文窗口 1,048,576 |
 | 宠物 | `display: desktop`，size 462，右上角 |
 
@@ -19,7 +19,7 @@
 | # | 功能 | 验证方式 | 结果 |
 |---|---|---|---|
 | 1 | 上下文用量 | `GET /dsh-pet-7340/mind/context` | ✅ `197,918 / 1,048,576 = 18.9%`（同一会话早前为 `723,880 = 69.0%`） |
-| 2 | 窗口兜底 | 重启后检查 `contextWindow` | ✅ 重启后仍能拿到 `1048576`（0.5.3 的 `resolveModel`/配置兜底） |
+| 2 | 窗口兜底 | 重启后检查 `contextWindow` | ✅ 重启后仍能拿到 `1048576`（`resolveModel`/配置兜底） |
 | 3 | 冷启动快照 | 检查 `dsh-pet/mind-state.json` | ✅ 文件存在，含 `usedTokens/contextWindow/percent/sessionId`，无屏幕内容 |
 | 4 | 工作记忆 | `POST /mind/summarize` | ✅ 生成 `memory/work/2026-11-15_0056_session-4113….md`，索引变为「工作记忆（1）」 |
 | 5 | 陪伴记忆 | 检查 `memory/companion/notes-2026-11.md` | ✅ 已有条目（称呼类），索引「陪伴记忆（1）」 |

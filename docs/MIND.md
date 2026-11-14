@@ -55,7 +55,7 @@ memory/INDEX.md ──▶ ctx.systemPrompt.section ──▶ 新会话 / 子支�
 
 **数据来源与冷启动**：DSH 的事件形状是 `{ type, seq, time, data }`，`usage`/`contextWindow`
 都在 `data` 里；计量只吃实时 `session/event`（不回放历史）。所以重启后要等这一轮回复结束才有实时数字；
-0.5.6 起会把上一轮快照写入 `$DSH_HOME/dsh-pet/mind-state.json`（只含 token 数/窗口/模型名），
+当前实现会把上一轮快照写入 `$DSH_HOME/dsh-pet/mind-state.json`（只含 token 数/窗口/模型名），
 启动时恢复并以**灰度 + 「上次记录，等待本轮数据」**提示，本轮 usage 到达即替换。
 DSH 只在路由/容量变化时才发 `request/context`，窗口缺失时用 `llm.resolveModel(provider, model)` 兜底，
 再不行才用配置 `mind.context.windowTokens` 手动指定。

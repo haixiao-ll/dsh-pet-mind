@@ -1,4 +1,4 @@
-# dsh-pet-mind 🐾 桌宠 + 心智层（0.5.8）
+# dsh-pet-mind 🐾 桌宠 + 心智层（0.5.0）
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-orange">
@@ -43,15 +43,13 @@
 | **待机** | 人不在（空闲 ≥5 分钟且屏幕未变化）→ 只播待机、碎碎念静音 | Windows 专用；误判可能发生 |
 | **隐私闸门** | 微信/支付宝/网银/密码管理器/远程桌面 + 标题兜底 + 识别不出即拒绝 | 不是万无一失，见 [PRIVACY](docs/PRIVACY.md) |
 
-### 最近修了什么（0.5.2 – 0.5.7，都是实测踩出来的）
+### 这个版本做了什么
 
-- **0.5.2**：DSH 事件载荷在 `event.data` 里，之前读顶层 → 上下文恒为 null、工作记忆写不出来；
-- **0.5.3**：重启后 DSH 不再发 `request/context` → 用 `llm.resolveModel` + `windowTokens` 补窗口；
-- **0.5.4/0.5.5**：环改到右肩外侧（避开气泡）、悬停显示；透明窗里 CSS `:hover` 不可靠，改用指针/鼠标事件；
-- **0.5.6**：冷启动先恢复上一轮快照（`mind-state.json`，只有 token 数），标灰显示；
-- **0.5.7**：`calc()` 里的乘法被 Chromium 丢弃导致环"有数据不显示" → 位置改 JS 像素；数据变化自动亮 10 秒。
-
-完整逐条见 [CHANGELOG.md](CHANGELOG.md)。
+- 把上游的产物级改动回植到 TypeScript，恢复 `npm run build` / `npm test` / CI 与发版自检；
+- 新增心智层：上下文环（右肩外侧，数据变化自动亮 10 秒/悬停常显，重启先显示上一轮快照）、
+  双轨本地记忆、OCR 专注建议（30 秒/每页一次/每天 6 条/失败重试一次/120 字）、待机、隐私闸门；
+- 发布材料：README、PRIVACY、LIMITATIONS、LEGAL、TESTING、SECURITY、CONTRIBUTING 与素材声明；
+- 当前版本实测记录见 [docs/TESTING.md](docs/TESTING.md)（1054 tests / 1053 pass）。
 
 ## 做不到什么（先看这里）
 
@@ -72,7 +70,7 @@
 
 ## 已知问题（不粉饰）
 
-- **重启后要等一轮回复才有实时数字**：计量只吃实时事件，不回放历史。0.5.6 起会先显示上一轮快照（灰度）顶一下；
+- **重启后要等一轮回复才有实时数字**：计量只吃实时事件，不回放历史；会先显示上一轮快照（灰度）顶一下；
 - **环不是所有时候都在**：默认"数据变化亮 10 秒 + 悬停常显"，避免一直挡视线；想让常驻可以提 issue；
 - **建议可能不来**：没字/敏感应用/夜间免打扰/当天 6 条用完，都会静默；
 - **OCR 质量依赖系统**：远程桌面、深色主题、小字号、游戏/视频可能读不出；
@@ -98,7 +96,7 @@
 "...\dsh.cmd" plugin --profile desktop remove @tuweizhi/dsh-pet
 
 :: 2) 装本包
-"...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.8.tgz"
+"...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.0.tgz"
 
 :: 3) 完全退出 DSH 再启动（不要在运行中热装后指望立即生效）
 ```
@@ -152,7 +150,7 @@ node lib/standalone.js
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：目录、构建、**与 DSH 的连接点**、IntelliJ 打开与调试、扩展指南
 - [docs/MIND.md](docs/MIND.md)：心智层设计、OCR 链路、策略与隐私
-- [docs/TESTING.md](docs/TESTING.md)：0.5.7 实测记录（上下文/记忆/OCR/待机/隐私）与未覆盖项
+- [docs/TESTING.md](docs/TESTING.md)：0.5.0 实测记录（上下文/记忆/OCR/待机/隐私）与未覆盖项
 - [docs/PRIVACY.md](docs/PRIVACY.md)：数据清单、出网边界、保留期、法律依据、用户控制
 - [docs/LIMITATIONS.md](docs/LIMITATIONS.md)：做不到什么（能力边界）
 - [docs/LEGAL.md](docs/LEGAL.md)：许可、素材、商标、个人信息与免责
