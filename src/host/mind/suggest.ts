@@ -30,7 +30,7 @@ export function buildSuggestionPrompt(input: SuggestPromptInput): SuggestPrompt 
   return {
     system:
       '你是桌面宠物，正陪主人工作。下面是从主人屏幕 OCR 出来的文字（可能有错漏、乱码）。' +
-      '请用一句中文给一条**具体**建议（不超过 40 字），要指向文字里真实出现的东西；' +
+      '请用一句中文给一条**具体**建议（不超过 ' + maxChars + ' 字），要指向文字里真实出现的东西；' +
       '不要泛泛地说“休息一下”，不要复述整段，不要解释你在 OCR。' +
       '如果内容涉及密码、支付、私聊等不宜评论的内容，只回复 SKIP。' +
       '只做出建议，不做任何实际操作；不要调用工具、不要修改文件、不要执行命令。',
@@ -39,10 +39,10 @@ export function buildSuggestionPrompt(input: SuggestPromptInput): SuggestPrompt 
   };
 }
 
-/** 文案上限：20–120 字之间，非法值回落 40 */
+/** 文案上限：20–120 字之间，非法值回落 120 */
 export function clampChars(value: unknown): number {
   const n = Number(value);
-  if (!Number.isFinite(n)) return 40;
+  if (!Number.isFinite(n)) return 120;
   return Math.min(120, Math.max(20, Math.floor(n)));
 }
 
@@ -52,7 +52,7 @@ export function clampChars(value: unknown): number {
  * - 去掉包裹的引号；
  * - SKIP / 跳过 / 空 → null（调用方据此"不弹"）。
  */
-export function cleanSuggestion(raw: string, maxChars = 40): string | null {
+export function cleanSuggestion(raw: string, maxChars = 120): string | null {
   let text = '';
   for (const ch of String(raw ?? '')) {
     const code = ch.codePointAt(0) ?? 0;

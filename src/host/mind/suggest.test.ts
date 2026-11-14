@@ -10,6 +10,8 @@ test('prompt：带应用名与 OCR 文本，且要求具体、允许 SKIP', () =
   assert.match(p.system, /SKIP/);
   // 用户要求：提示词最后必须约束"只做建议，不做实际操作"
   assert.match(p.system, /只做出建议，不做任何实际操作/);
+  // 提示词里的字数上限要跟着 maxChars 走（不是写死 40）
+  assert.match(p.system, /不超过 30 字/);
   assert.equal(p.maxChars, 30);
 });
 
@@ -35,6 +37,6 @@ test('cleanSuggestion：SKIP / 跳过 / 空 都返回 null（不弹气泡）', (
 test('clampChars：20–120，非法值回落 40', () => {
   assert.equal(clampChars(5), 20);
   assert.equal(clampChars(999), 120);
-  assert.equal(clampChars('abc'), 40);
+  assert.equal(clampChars('abc'), 120);
   assert.equal(clampChars(40), 40);
 });

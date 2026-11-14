@@ -193,7 +193,7 @@ Helper 截帧（OCR 模式用 1600×900，缩到 640×360 文字会糊）→ bas
 ```jsonc
 "mind": {
   "coach": { "dwellSec": 30, "dailyLimit": 6 },
-  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 40 },
+  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 120 },
   "vision": { "enabled": true, "mode": "ocr" }
 }
 ```
@@ -242,7 +242,7 @@ Helper 截帧（OCR 模式用 1600×900，缩到 640×360 文字会糊）→ bas
                "polishWithModel": false },
   "coach":   { "enabled": true, "dwellSec": 30, "idleMinutes": 5,
                "dailyLimit": 6, "quietHours": [23, 8] },
-  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 40 },
+  "suggestion": { "model": { "provider": "", "model": "" }, "maxChars": 120 },
   "privacy": { "paused": false, "apps": [], "titlePatterns": [],
                "cloudAllowlist": [], "unknownIsSensitive": true },
   "sensor":  { "enabled": true, "intervalMs": 5000 },

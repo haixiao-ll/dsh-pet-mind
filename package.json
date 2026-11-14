@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet-mind",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。0.5 增强 fork：恢复 TypeScript 构建链，新增 mind 心智层（上下文用量、双轨长期记忆、桌面感知与主动建议，只直播不录屏）。详见 CHANGELOG / docs。",
   "icon": "assets/logo.png",
   "keywords": [
