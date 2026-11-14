@@ -164,6 +164,14 @@ export class ContextMeter {
     });
   }
 
+  /** 启动时恢复上一轮快照：标记 stale，等本轮 assistant/message 到了会被整体替换 */
+  seed(snapshot: ContextSnapshot): void {
+    if (!snapshot || !snapshot.sessionId) return;
+    if (!Number.isFinite(snapshot.usedTokens) || snapshot.usedTokens <= 0) return;
+    if (!Number.isFinite(snapshot.contextWindow) || (snapshot.contextWindow ?? 0) <= 0) return;
+    this.bySession.set(snapshot.sessionId, { ...snapshot, stale: true });
+  }
+
   /** 清掉一条会话（会话被删/被归档时调用；内存不回收会随会话数增长） */
   forget(sessionId: string): void {
     this.bySession.delete(sessionId);

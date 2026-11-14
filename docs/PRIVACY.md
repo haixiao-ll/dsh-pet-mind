@@ -11,6 +11,7 @@
 | OCR 文字 | Windows 自带 OCR（本地） | 仅内存 | 用于一次建议生成，函数返回即释放 |
 | 前台应用名 / 窗口标题 | Windows `GetForegroundWindow` | 仅内存 | 标题用完即弃，**不落盘、不进日志** |
 | 建议文案 | 文本模型返回 | 内存 + 状态接口 | 最近一条，进程重启清空 |
+| 上下文快照（仅 token 数/窗口/模型名） | DSH 的 usage / context | `$DSH_HOME/dsh-pet/mind-state.json` | 覆盖写，超过 24 小时不恢复；删除文件即清 |
 | 工作记忆 | 会话事件 → 本地抽取摘要 | `$DSH_HOME/dsh-pet/memory/work/*.md` | 直到你删除 |
 | 陪伴记忆 | 聊天里"称呼/偏好/约定"句 | `$DSH_HOME/dsh-pet/memory/companion/*.md` | 直到你删除 |
 | 记忆索引 | 自动生成 | `memory/INDEX.md` | 随记忆更新 |

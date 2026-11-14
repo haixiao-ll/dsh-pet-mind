@@ -45,3 +45,11 @@ test('formatTokens / ringTitle', () => {
   assert.equal(ringTitle({ usedTokens: 80000, contextWindow: 128000, percent: 0.625 }), '上下文已用 63%（80k / 128k tokens）');
   assert.equal(ringTitle(null), undefined);
 });
+
+test('readMindState：stale 快照会透出，标题带「上次记录」', () => {
+  const view = readMindState({
+    context: { usedTokens: 1000, contextWindow: 10000, percent: 0.1, stale: true },
+  });
+  assert.equal(view.context?.stale, true);
+  assert.match(ringTitle(view.context ?? null) ?? '', /上次记录/);
+});

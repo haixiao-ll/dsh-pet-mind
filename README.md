@@ -1,4 +1,4 @@
-# dsh-pet-mind 🐾 桌宠 + 心智层（0.5.4）
+# dsh-pet-mind 🐾 桌宠 + 心智层（0.5.6）
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-orange">

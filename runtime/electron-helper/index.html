@@ -83,8 +83,13 @@
         opacity: 0;
         transition: opacity 0.15s ease;
       }
-      .pet-sprite:hover .pet-mind-ring {
+      .pet-sprite:hover .pet-mind-ring,
+      .pet-mind-ring.is-hover {
         opacity: 1;
+      }
+      /* 恢复的上一轮快照：灰度一点，提示不是本轮实时数据 */
+      .pet-mind-ring.is-stale {
+        filter: grayscale(0.55);
       }
       .pet-mind-ring__dial {
         position: absolute;

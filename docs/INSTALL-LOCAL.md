@@ -7,7 +7,7 @@
 
 ## 0. 准备
 
-- 包：`E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.4.tgz`（`npm pack` 产物）
+- 包：`E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.6.tgz`（`npm pack` 产物）
 - 桌面应用自带 CLI（你这台机器的路径）：
   `D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`
 - 建议先备份：`%USERPROFILE%\.dsh\dsh-pet\`（配置 + 记忆）
@@ -24,13 +24,13 @@
 ## 2. 安装本包
 
 ```bat
-"D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.4.tgz"
+"D:\Users\admin\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "E:\idea-workspase\dsh-pet-main\dsh-pet-mind-0.5.6.tgz"
 ```
 
 装完检查 `C:\Users\admin\.dsh\profiles\desktop\package.json`：
 
 ```jsonc
-"dependencies": { "dsh-pet-mind": "file:../../../idea-workspase/dsh-pet-main/dsh-pet-mind-0.5.4.tgz" },
+"dependencies": { "dsh-pet-mind": "file:../../../idea-workspase/dsh-pet-main/dsh-pet-mind-0.5.6.tgz" },
 "dsh": { "profile": { "bundles": [ ..., "dsh-pet-mind" ] } }
 ```
 

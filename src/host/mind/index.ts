@@ -23,6 +23,8 @@
 import { ContextMeter, ThresholdLatch, sessionIdOf, type SessionLike } from './context-meter';
 import { Coach, contextWarningText, type CoachConfig } from './coach';
 import { MemoryStore, summarizeLocally, type ChatLine, type WorkSummary } from './memory';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { checkPrivacy, cloudAllowed, isSelfWindow, type PrivacyConfig } from './privacy';
 import { startWindowsActivityWatcher, type ActivityWatcher } from './sensors/windows';
 import { FrameGate, type FrameAccept, type FrameSignal } from './vision';
@@ -176,6 +178,20 @@ export class Mind {
     const cfg = this.deps.getConfig();
     if (cfg.enabled === false) return;
     this.started = true;
+    // 冷启动：实时事件不回放历史，先恢复上一轮快照（标 stale），避免"必须互动一次才有环"
+    this.restoreState();
+    // 预热 contextWindow：避免第一轮 usage 到了还要等异步解析（环出现更跟手）
+    if (typeof this.deps.resolveWindow === 'function') {
+      const sel = this.deps.defaultModel?.();
+      if (sel && sel.provider && sel.model) {
+        void this.deps
+          .resolveWindow(sel.provider, sel.model)
+          .then((w) => {
+            if (w !== undefined) this.windowCache.set(sel.provider + '/' + sel.model, w);
+          })
+          .catch(() => {});
+      }
+    }
     // 截帧是独立开关：即使关掉活跃度采集，用户也可能只想用「屏幕变化」做活动证据。
     // 默认关闭——像素相关能力必须由用户显式打开（见 assets/config.jsonc 的 vision 段）。
     const vision = cfg.vision ?? {};
@@ -339,6 +355,48 @@ export class Mind {
     this.deps.log(`建议已发送：${suggestion.reason}`);
   }
 
+  /** 快照落盘位置：只存 token 数与模型名，不含任何屏幕内容 */
+  private get stateFile(): string {
+    return join(this.deps.dshHome, 'dsh-pet', 'mind-state.json');
+  }
+
+  /** 启动时读取上一轮快照（24 小时内、字段合法才用） */
+  private restoreState(): void {
+    try {
+      const raw = JSON.parse(readFileSync(this.stateFile, 'utf8')) as Partial<ContextSnapshot>;
+      const used = Number(raw.usedTokens);
+      const window = Number(raw.contextWindow);
+      const at = Number(raw.at);
+      if (!Number.isFinite(used) || used <= 0) return;
+      if (!Number.isFinite(window) || window <= 0) return;
+      if (!Number.isFinite(at) || Date.now() - at > 24 * 3600_000) return;
+      this.meter.seed({
+        sessionId: String(raw.sessionId ?? 'restored'),
+        usedTokens: used,
+        contextWindow: window,
+        percent: Math.min(1, used / window),
+        ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}),
+        ...(typeof raw.model === 'string' ? { model: raw.model } : {}),
+        at,
+      });
+      this.publishNow();
+    } catch {
+      /* 没有/损坏就不恢复：宁可晚一点显示，也不显示错数字 */
+    }
+  }
+
+  /** 把最近快照写盘（频率 = 每次广播变化，约每轮 1–2 次） */
+  private persistState(): void {
+    try {
+      const snap = this.meter.latest();
+      if (!snap || !snap.contextWindow || snap.usedTokens <= 0) return;
+      const { stale: _stale, ...rest } = snap;
+      writeFileSync(this.stateFile, JSON.stringify(rest), 'utf8');
+    } catch {
+      /* 写不了不影响功能 */
+    }
+  }
+
   /** 是否处于「人不在」的待机态（宿主用它静音碎碎念、客户端用它只播 idle） */
   isStandby(): boolean {
     return this.standby;
@@ -364,6 +422,7 @@ export class Mind {
       if (sig === this.lastPublished) return;
       this.lastPublished = sig;
       this.deps.publish(view);
+      this.persistState();
     } catch {
       /* 展示层失败不影响心智层 */
     }

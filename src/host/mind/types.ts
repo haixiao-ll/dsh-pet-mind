@@ -25,6 +25,8 @@ export interface ContextSnapshot {
   model?: string;
   /** 采样时间（ms） */
   at: number;
+  /** true = 启动时从磁盘恢复的上一轮快照（等本轮 usage 到了就清掉） */
+  stale?: boolean;
 }
 
 /** 桌面活跃度采样（由 Windows 侧采集器产出；隐私相关字段见 privacy.ts） */

@@ -378,6 +378,7 @@ function applyMindLeaf(leaf) {
     percent: typeof ctx.percent === 'number' ? ctx.percent : undefined,
     usedTokens: typeof ctx.usedTokens === 'number' ? ctx.usedTokens : undefined,
     contextWindow: typeof ctx.contextWindow === 'number' ? ctx.contextWindow : undefined,
+    stale: ctx.stale === true,
   };
   for (const s of sprites) s.setMind(mind);
   // 截帧请求：id 变了才截一次（像素不出 Helper，回传的只有哈希）

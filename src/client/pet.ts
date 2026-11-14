@@ -169,7 +169,9 @@ const css = [
   // 这里放「角色右肩外侧」：水平贴身体右缘（身体宽 240/640 → 中线 +18.75%），
   // 垂直 26%（气泡带约 0–23% 以下）；只在悬停宠物时出现，移开淡出。
   '.dsh-pet-mind-ring{position:absolute;left:calc(50% + var(--dsh-pet-size,462px)*0.1875 + 4px);top:28%;width:34px;height:34px;border-radius:50%;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.28);background:rgba(15,23,42,.55);backdrop-filter:blur(4px);opacity:0;transition:opacity .15s ease}',
-  '.dsh-pet-root:hover .dsh-pet-mind-ring{opacity:1}',
+  '.dsh-pet-root:hover .dsh-pet-mind-ring,.dsh-pet-mind-ring.is-hover{opacity:1}',
+  // 恢复的上一轮快照：灰度一点，提示「不是本轮实时数据」
+  '.dsh-pet-mind-ring.is-stale{filter:grayscale(.55)}',
   '.dsh-pet-mind-ring__text{position:relative;font:600 10px/1 ui-sans-serif,system-ui;color:#e5e7eb;letter-spacing:-.2px;pointer-events:none}',
   '@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
   // 统一右键菜单样式（与桌面注入同一份 MENU_CSS）
@@ -2402,13 +2404,19 @@ export function makePetUI(rt: {
       onPointerEnter: (e: ReactNS.PointerEvent<HTMLDivElement>) => {
         placeTip(e.clientX, e.clientY); // 先摆位再显示：否则会先在兜底坐标闪一帧
         setTipOn(true);
+        setMindHover(true);
       },
-      onPointerLeave: () => setTipOn(false),
+      onPointerLeave: () => {
+        setTipOn(false);
+        setMindHover(false);
+      },
       onContextMenu: handleContextMenu,
       // 原先这里挂 title（原生系统提示）：已换成自绘浮层，但无障碍名称不能跟着丢
       'aria-label': cfg.name,
     };
     // ---- 心智层：上下文进度环（只有拿到百分比才渲染；窗口未知时宁可不显示）----
+    // 显隐用 **JS 指针事件**而不是 CSS :hover：桌面透明窗/指针捕获下 :hover 不可靠。
+    const [mindHover, setMindHover] = useState(false);
     const mindPct =
       mindContext && typeof mindContext.percent === 'number'
         ? Math.max(0, Math.min(1, mindContext.percent))
@@ -2418,7 +2426,11 @@ export function makePetUI(rt: {
       mindPct === null
         ? null
         : h('div', {
-            className: 'dsh-pet-mind-ring' + (mindStandby ? ' is-standby' : ''),
+            className:
+                'dsh-pet-mind-ring' +
+                (mindStandby ? ' is-standby' : '') +
+                (mindHover ? ' is-hover' : '') +
+                (mindContext?.stale ? ' is-stale' : ''),
             title: mindTitle,
             'aria-label': mindTitle,
             children: [
@@ -2528,7 +2540,7 @@ export function makePetUI(rt: {
           // 宿主是老版本（没有 /mind 路由）或网络抖动：静默，下个周期再试。
           // 这里**不能**报错刷屏——桌宠的核心功能不依赖心智层。
         }
-        if (alive) timer = window.setTimeout(() => void tick(), 10_000);
+        if (alive) timer = window.setTimeout(() => void tick(), 3_000);
       };
       void tick();
       return () => {

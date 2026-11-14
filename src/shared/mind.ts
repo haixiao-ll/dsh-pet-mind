@@ -11,6 +11,8 @@ export interface MindContextView {
   provider?: string;
   model?: string;
   at?: number;
+  /** true = 启动时恢复的上一轮快照（等本轮数据到了会替换） */
+  stale?: boolean;
 }
 
 /** /mind/state 的展示视图（宽松：宿主版本不同也尽量读出能读的） */
@@ -47,6 +49,7 @@ export function readMindState(raw: unknown): MindStateView {
         provider: typeof c.provider === 'string' ? c.provider : undefined,
         model: typeof c.model === 'string' ? c.model : undefined,
         at: Number.isFinite(Number(c.at)) ? Number(c.at) : undefined,
+        stale: c.stale === true,
       };
     }
   }
@@ -85,5 +88,6 @@ export function ringTitle(context: MindContextView | null): string | undefined {
   const pct = Math.round(context.percent * 100);
   const win = context.contextWindow;
   const detail = win ? `（${formatTokens(context.usedTokens)} / ${formatTokens(win)} tokens）` : '';
-  return `上下文已用 ${pct}%${detail}`;
+  const note = context.stale ? '（上次记录，等待本轮数据）' : '';
+  return `上下文已用 ${pct}%${detail}${note}`;
 }

@@ -223,6 +223,20 @@ class PetSprite {
     this.ringText.className = 'pet-mind-ring__text';
     this.ring.append(this.ringDial, ringHole, this.ringText);
     stage.append(this.ring);
+    // 显隐用指针事件（透明置顶窗/指针捕获下 CSS :hover 不可靠）
+    for (const evt of ['pointerenter', 'mouseenter']) {
+      this.hit.addEventListener(evt, () => this.ring.classList.add('is-hover'));
+    }
+    for (const evt of ['pointerleave', 'mouseleave']) {
+      this.hit.addEventListener(evt, () => this.ring.classList.remove('is-hover'));
+    }
+    // 兜底：窗口 click-through + forward 时 pointerenter 不一定触发；用全局 mousemove 判命中区，
+    // 保证"悬停出现、移开消失"在透明窗里也成立。
+    window.addEventListener('mousemove', (e) => {
+      const r = this.hit.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      this.ring.classList.toggle('is-hover', inside);
+    });
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
     // 气泡可点时点一下有落点，两种意图分派（内容与显隐仍全部归 renderBubble，这里只吞事件 + 转交）：
@@ -710,7 +724,10 @@ class PetSprite {
   setMind(mind) {
     const data = mind || {};
     this.standby = data.standby === true;
-    if (this.ring) this.ring.classList.toggle('is-standby', this.standby);
+    if (this.ring) {
+      this.ring.classList.toggle('is-standby', this.standby);
+      this.ring.classList.toggle('is-stale', data.stale === true);
+    }
     const pct =
       typeof data.percent === 'number' && Number.isFinite(data.percent)
         ? Math.max(0, Math.min(1, data.percent))
@@ -733,7 +750,8 @@ class PetSprite {
       '%' +
       (win > 0 && used >= 0
         ? '（' + Math.round(used / 1000) + 'k / ' + Math.round(win / 1000) + 'k tokens）'
-        : '');
+        : '') +
+      (data.stale === true ? '（上次记录，等待本轮数据）' : '');
   }
 
   // 动画链（与浏览器 pickNext 语义一致，纯逻辑在 shared）

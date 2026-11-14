@@ -82,3 +82,12 @@ test('setWindow：usage 先到、窗口后补（重启后 request/context 缺失
   meter.setWindow('s3', 0);
   assert.equal(meter.snapshot('s3')?.contextWindow, 10000, '非法窗口不应覆盖');
 });
+
+test('seed：启动恢复的快照标记 stale，后续实时 usage 会覆盖它', () => {
+  const meter = new ContextMeter();
+  meter.seed({ sessionId: 's4', usedTokens: 100, contextWindow: 1000, percent: 0.1, at: 1 });
+  assert.equal(meter.snapshot('s4')?.stale, true);
+  meter.observe({ header: { id: 's4' } }, { type: 'assistant/message', data: { usage: { inputTokens: 500, outputTokens: 0 } } });
+  assert.equal(meter.snapshot('s4')?.stale, undefined);
+  assert.equal(meter.snapshot('s4')?.usedTokens, 500);
+});
