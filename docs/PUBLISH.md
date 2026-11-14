@@ -111,21 +111,91 @@ git push gitee main
 
 ---
 
-## 4. 发布到 npm（可选，默认不做）
+## 4. 发布到 npm
 
-先想清楚三件事：**包名不能撞上游**、**素材授权**、**registry 账号**。
+### 4.1 包名：优先用现有的 `dsh-pet-mind`（不要加 scope）
+
+- 已确认 npm 上 **`dsh-pet-mind` 未被占用**（`npm view dsh-pet-mind` 返回 404）；
+- DSH 的 client 模块 id 与插件名是**逐字绑定**的：
+  `src/client/index.ts` 的 `id`、`cordis.patch.yml` 的 `name`、`package.json` 的 `name` 必须一致；
+- 如果你改成 `@你的ID/dsh-pet-mind`，必须同时改这三处并重新构建，否则装上去会报
+  “loaded without registering … via __ModuleLoader__.load” 或入口不激活。
+
+### 4.2 一次性准备
 
 ```sh
-# 1) 换成你的 scope（scoped 包必须声明 public，否则默认私有要收费）
-#    package.json: "name": "@你的ID/dsh-pet-mind"
-# 2) 登录（会打开浏览器）
-npm login
-# 3) 发布（prepack 会自动跑 build + typecheck）
-npm publish --access public
+npm login          # 浏览器登录；建议账号开 2FA
+npm whoami         # 应输出你的 npm 用户名
 ```
 
-CI 里的 `Release` workflow 默认**只打包、不发布**（上传 tgz artifact，可选建 GitHub Release），
-这是有意的：发布到哪个 registry、用哪个名字，必须你本人确认。
+- 把 `package.json` 的 `repository` / `homepage` / `bugs` 里的 `your-id` 换成你的 GitHub ID；
+- 想清楚素材：`assets/memes`（梗图）与 `assets/fonts`（上首软糖体）权利状态不明，
+  公开分发前建议删除或替换（删除不会坏，表情包自动失效、字体回退系统字体）；
+- 确认 `LICENSE` / `NOTICE.md` / `THIRD-PARTY-NOTICES.md` 随包发布（`files` 已包含）。
+
+### 4.3 本地预检
+
+```sh
+npm run typecheck
+npm test
+node tools/verify-package.mjs
+npm publish --dry-run     # 只打包、不发布，检查文件清单与体积
+```
+
+本仓库实测（0.5.0）：**434 个文件，压缩后 63.0MB，解包 67.1MB**——在 npm 限制内，
+但首次发布会比较慢（上传几分钟属正常）。
+
+### 4.4 发布
+
+```sh
+npm publish               # 未加 scope，默认 public
+# 有 2FA 会提示输入一次性验证码
+```
+
+- `prepack` 会自动跑 `build + typecheck + prepack-check`，任何一步失败都会**阻止发布**；
+- 不要用 `--force` 跳过；
+- 若只是想先发测试版：`npm publish --tag beta`，正式版再 `npm publish --tag latest`。
+
+### 4.5 发布后验证
+
+```sh
+npm view dsh-pet-mind version          # 0.5.0
+npm view dsh-pet-mind dist.tarball
+mkdir /tmp/try && cd /tmp/try && npm init -y && npm i dsh-pet-mind
+"…\dsh.cmd" plugin --profile desktop add dsh-pet-mind
+```
+
+装完**完全退出 DSH 再启动**；心智层默认已开，不需要写配置。
+
+### 4.6 后续版本
+
+1. 改 `package.json` 的 `version`（SemVer：修复 → patch，新功能 → minor）；
+2. `CHANGELOG.md` 增加一节；
+3. `npm publish`（同一版本号不能重复发布）；
+4. 需要撤销刚发的版本：`npm unpublish dsh-pet-mind@x.y.z`（24 小时内且无依赖才允许；
+   **能不用就不用**，优先发新 patch）。
+
+### 4.7 自动化（可选）
+
+当前 `Release` workflow 只打包、不发布。要自动发布，二选一：
+
+- **Token**：npm 后台创建 Granular Token（只勾 `dsh-pet-mind` 的 read/write），
+  在 GitHub 仓库 Secrets 里存 `NPM_TOKEN`，发布步骤用 `npm publish --access public` + `NODE_AUTH_TOKEN`；
+- **OIDC provenance**：`npm publish --provenance --access public`，配合 GitHub Actions 的
+  `id-token: write` 权限，无需长期 token（npm 账号需开启 2FA）。
+
+无论哪种，**不要把 token 写进 `.npmrc` 提交到仓库**。
+
+### 4.8 常见错误
+
+| 错误 | 原因 / 处理 |
+|---|---|
+| `ENEEDAUTH` | 没登录：`npm login` 或配置 `NODE_AUTH_TOKEN` |
+| `E403` + 2FA 提示 | 账号开了 2FA：按提示输入 OTP，或改用 Granular Token |
+| `E409` | 版本已存在：bump `version` 再发 |
+| `E402 Payment Required` | 发的是 scoped 包且没加 `--access public` |
+| `EPUBLISHCONFLICT` | 24 小时内撤销过同名版本，或版本号重复 |
+| 上传超时 | 63MB 包网络慢：重试；不要重复触发多次发布 |
 
 ---
 
