@@ -52,3 +52,21 @@ test('ThresholdLatch：80% 报过一次后不再重复，95% 才再提醒；新�
   latch.forget('a');
   assert.equal(latch.check('a', 0.85, [0.8, 0.95]), 0.8);
 });
+
+test('DSH 事件载荷在 data 里（session.v4）：usage 与 contextWindow 都能读到', () => {
+  const meter = new ContextMeter();
+  const session = { header: { id: 's2' } };
+  meter.observe(session, {
+    type: 'request/context',
+    data: { provider: 'deepseek-account', model: 'deepseek-flash', contextWindow: 1048576 },
+  });
+  meter.observe(session, {
+    type: 'assistant/message',
+    data: { usage: { inputTokens: 1103, outputTokens: 1566, cacheReadTokens: 11008, cacheWriteTokens: 0, totalTokens: 13677 } },
+  });
+  const snap = meter.snapshot('s2');
+  assert.equal(snap?.usedTokens, 13677);
+  assert.equal(snap?.contextWindow, 1048576);
+  assert.ok((snap?.percent ?? 0) > 0.01 && (snap?.percent ?? 1) < 0.05);
+  assert.equal(snap?.model, 'deepseek-flash');
+});

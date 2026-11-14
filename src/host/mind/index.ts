@@ -594,8 +594,17 @@ export class Mind {
  * 记忆里只该有"人说的话"和"宠物说的话"。
  */
 export function textOf(event: Record<string, unknown>): string {
-  const message = event.message as { content?: unknown } | undefined;
-  const blocks = Array.isArray(message?.content) ? message.content : [];
+  // DSH 的 session/event 形状是 { type, data }：assistant 在 data.message.content，
+  // user 直接在 data.content；同时兼容旧的扁平形状（顶层 message/content）
+  const data = (event.data && typeof event.data === 'object' ? event.data : event) as {
+    message?: { content?: unknown };
+    content?: unknown;
+  };
+  const blocks = Array.isArray(data.message?.content)
+    ? data.message.content
+    : Array.isArray(data.content)
+      ? data.content
+      : [];
   const parts: string[] = [];
   for (const block of blocks) {
     const b = block as { type?: unknown; text?: unknown };

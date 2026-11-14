@@ -81,12 +81,29 @@ export class ContextMeter {
   /** 吃一条宿主事件；不认识的形状一律忽略（宿主换字段时不至于抛错） */
   observe(session: SessionLike | null | undefined, event: unknown): void {
     if (!isMeteredSession(session)) return;
-    const ev = event as { type?: unknown; usage?: TokenUsageLike; contextWindow?: unknown; provider?: unknown; model?: unknown; context?: unknown } | null;
+    const ev = event as {
+      type?: unknown;
+      /** DSH 的事件载荷（session.v4）：usage / contextWindow 都在 data 里 */
+      data?: { usage?: TokenUsageLike; contextWindow?: unknown; provider?: unknown; model?: unknown; context?: unknown };
+      usage?: TokenUsageLike;
+      contextWindow?: unknown;
+      provider?: unknown;
+      model?: unknown;
+      context?: unknown;
+    } | null;
     if (!ev || typeof ev !== 'object') return;
+    // 线上事件形状是 { type, seq, time, data }；兼容早期/扁平形状（顶层直接放字段）
+    const payload = (ev.data && typeof ev.data === 'object' ? ev.data : ev) as {
+      usage?: TokenUsageLike;
+      contextWindow?: unknown;
+      provider?: unknown;
+      model?: unknown;
+      context?: unknown;
+    };
     const id = sessionIdOf(session);
 
     if (ev.type === 'assistant/message') {
-      const used = usedTokensOf(ev.usage);
+      const used = usedTokensOf(payload.usage);
       if (used === undefined) return;
       const prev = this.bySession.get(id);
       this.bySession.set(id, {
@@ -103,7 +120,7 @@ export class ContextMeter {
 
     if (ev.type === 'request/context') {
       // 形状：{ provider, model, contextWindow? }（也可能被包在 ev.context 里）
-      const raw = (ev.context ?? ev) as { provider?: unknown; model?: unknown; contextWindow?: unknown };
+      const raw = (payload.context ?? payload) as { provider?: unknown; model?: unknown; contextWindow?: unknown };
       const window = Number(raw.contextWindow);
       const prev = this.bySession.get(id) ?? { sessionId: id, usedTokens: 0, at: Date.now() };
       this.bySession.set(id, {

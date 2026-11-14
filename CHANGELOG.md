@@ -6,6 +6,25 @@
 
 ---
 
+## [0.5.2] —— 修复：DSH 事件载荷在 `data` 里，上下文与工作记忆之前一直为空
+
+一句话：**0.5.0/0.5.1 读错了事件层级**——`session/event` 的形状是 `{ type, seq, time, data }`，
+而代码读的是顶层 `usage` / `message`，于是：
+
+- 上下文用量永远是 `null`（头顶环不出现、80%/95% 不提醒）；
+- 对话缓冲一直为空（`POST /mind/summarize` 回 `no-session`，工作记忆写不出来）。
+
+修复：
+
+- `ContextMeter` 从 `event.data.usage` / `event.data.contextWindow` 取值（兼容旧的扁平形状）；
+- `textOf` 从 `event.data.message.content`（assistant）与 `event.data.content`（user）取文本；
+- 用真实会话日志回放验证：473 条事件 → `683,345 / 1,048,576 = 65.2%`（deepseek-flash）；
+- 新增 3 条事件形状测试（data 包装、旧形状、非 text 块忽略）。
+
+其余行为不变（0.5.1 的 maxChars 120 仍在）。
+
+---
+
 ## [0.5.1] —— 建议文案上限可到 120 字，提示词跟随 maxChars
 
 - `mind.suggestion.maxChars` 默认从 40 调到 120（合法范围仍是 20–120）；
