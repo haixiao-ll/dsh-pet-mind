@@ -39,6 +39,11 @@ export interface MindConfig {
     thresholds?: number[];
     /** 到阈值时让宠物开口提醒（默认 true） */
     notify?: boolean;
+    /**
+     * 手动指定模型窗口（token）。0/缺省 = 自动（宿主 llm.resolveModel）；
+     * 自动拿不到时也可以在这里兜底，免得环一直不显示。
+     */
+    windowTokens?: number;
   };
   memory?: {
     /** 到阈值时自动落一份工作记忆（默认 true） */
@@ -96,6 +101,10 @@ export interface MindDeps {
   polish?(input: { lines: readonly ChatLine[]; draft: WorkSummary }): Promise<Partial<WorkSummary> | null>;
   /** OCR 文本 → 一句建议（宿主用"轻度文本模型"实现）。返回 null = 不打扰。 */
   suggest?(input: { text: string; app?: string }): Promise<string | null>;
+  /** 当前对话模型（用于在 request/context 缺失时兜底解析 contextWindow） */
+  defaultModel?(): { provider: string; model: string } | undefined;
+  /** 解析某 provider/model 的上下文窗口；失败返回 undefined（宿主用 llm.resolveModel 实现） */
+  resolveWindow?(provider: string, model: string): Promise<number | undefined>;
   /** 把展示用的心智状态单向广播给渲染端（宿主写 S 的 sections.mind）。
    *  浏览器用它画进度环、桌面 Helper 用它切待机；失败不影响任何逻辑。 */
   publish?(view: { enabled: boolean; standby: boolean; context: ContextSnapshot | null }): void;
@@ -143,6 +152,8 @@ export class Mind {
   private readonly frameGate = new FrameGate();
   /** 本次进程收到过多少帧（只用于"第一帧"提示，不落盘） */
   private frameCount = 0;
+  /** provider/model → contextWindow 缓存（避免每条 usage 都去 resolveModel） */
+  private readonly windowCache = new Map<string, number>();
   private captureTimer: ReturnType<typeof setInterval> | null = null;
   /** 这次截帧的用途：hash 只算变化；ocr/model 要带图（后者分别走本地 OCR / 云端视觉） */
   private pendingKind: 'hash' | 'ocr' | 'model' = 'hash';
@@ -226,6 +237,14 @@ export class Mind {
     this.meter.observe(session, event);
     // 计量变了就广播一次（去重在里面：request/context 与 usage 各来一条也不会写两次）
     this.publishNow();
+    // DSH 只在路由/容量变化时才发 request/context；重启后可能一直等不到窗口。
+    // 收到 usage 但窗口未知 → 用 llm.resolveModel / 配置兜底补上。
+    if (type === 'assistant/message') {
+      const id = sessionIdOf(session);
+      if (this.meter.snapshot(id)?.contextWindow === undefined) {
+        void this.ensureWindow(id, cfg).catch(() => {});
+      }
+    }
 
     // 2) 文本缓冲（排除子代理：它们的对话属于子任务，写进"我们的记忆"会污染）
     if (type === 'user/message' || type === 'assistant/message') {
@@ -498,6 +517,43 @@ export class Mind {
       this.publishNow();
     }
     return result;
+  }
+
+  /**
+   * 给会话补 contextWindow：先看配置 override，再问宿主 llm.resolveModel；结果缓存。
+   * 失败静默——环不显示比显示错的百分比要好。
+   */
+  private async ensureWindow(sessionId: string, cfg: MindConfig): Promise<void> {
+    const snap = this.meter.snapshot(sessionId);
+    if (!snap || snap.contextWindow !== undefined) return;
+
+    const override = Number(cfg.context?.windowTokens);
+    let window = Number.isFinite(override) && override > 0 ? override : undefined;
+
+    if (window === undefined && typeof this.deps.resolveWindow === 'function') {
+      const model =
+        snap.provider && snap.model
+          ? { provider: snap.provider, model: snap.model }
+          : this.deps.defaultModel?.();
+      if (model && model.provider && model.model) {
+        const key = model.provider + '/' + model.model;
+        const cached = this.windowCache.get(key);
+        if (cached !== undefined) {
+          window = cached;
+        } else {
+          const resolved = await this.deps.resolveWindow(model.provider, model.model).catch(() => undefined);
+          if (resolved !== undefined) {
+            this.windowCache.set(key, resolved);
+            window = resolved;
+          }
+        }
+      }
+    }
+
+    if (window !== undefined) {
+      this.meter.setWindow(sessionId, window);
+      this.publishNow();
+    }
   }
 
   /**

@@ -1032,6 +1032,29 @@ export function apply(ctx: any): void {
       state.writePet(petId, 'say', { text });
     },
     log: (message: string) => console.log('[dsh-pet] ' + message),
+    // 上下文窗口兜底：DSH 只在路由/容量变化时发 request/context，重启后可能一直等不到。
+    // resolveModel 是宿主 llm 的只读查询；失败返回 undefined（宁可不显示，也不显示错数字）。
+    defaultModel: () => {
+      try {
+        const sel = ctx.agentDefaultModel.currentSelection();
+        return { provider: String(sel.provider), model: String(sel.model) };
+      } catch {
+        return undefined;
+      }
+    },
+    resolveWindow: async (provider: string, model: string) => {
+      try {
+        const llm = ctx.llm as
+          | { resolveModel?: (p: string, m: string) => Promise<{ context?: { contextWindow?: unknown } }> }
+          | undefined;
+        if (typeof llm?.resolveModel !== 'function') return undefined;
+        const info = await llm.resolveModel(provider, model);
+        const window = Number(info?.context?.contextWindow);
+        return Number.isFinite(window) && window > 0 ? window : undefined;
+      } catch {
+        return undefined;
+      }
+    },
     // 心智状态广播：写 S 的 sections.mind（浏览器画进度环、桌面 Helper 切待机都读它）。
     // 只写这一条叶子，不碰 pets.*——宠物本体的状态机完全不受心智层影响。
     publish: (view) => state.writeSection('mind', view),

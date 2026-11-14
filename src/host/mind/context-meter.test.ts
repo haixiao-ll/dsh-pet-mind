@@ -70,3 +70,15 @@ test('DSH 事件载荷在 data 里（session.v4）：usage 与 contextWindow 都
   assert.ok((snap?.percent ?? 0) > 0.01 && (snap?.percent ?? 1) < 0.05);
   assert.equal(snap?.model, 'deepseek-flash');
 });
+
+test('setWindow：usage 先到、窗口后补（重启后 request/context 缺失的兜底）', () => {
+  const meter = new ContextMeter();
+  const session = { header: { id: 's3' } };
+  meter.observe(session, { type: 'assistant/message', data: { usage: { inputTokens: 1000, outputTokens: 200 } } });
+  assert.equal(meter.snapshot('s3')?.percent, undefined);
+  meter.setWindow('s3', 10000);
+  assert.equal(meter.snapshot('s3')?.contextWindow, 10000);
+  assert.equal(meter.snapshot('s3')?.percent, 0.12);
+  meter.setWindow('s3', 0);
+  assert.equal(meter.snapshot('s3')?.contextWindow, 10000, '非法窗口不应覆盖');
+});

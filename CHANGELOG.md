@@ -6,6 +6,21 @@
 
 ---
 
+## [0.5.3] —— 修复：重启后拿不到 `contextWindow`，头顶环不显示
+
+一句话：**0.5.2 能算出已用 token，但拿不到模型窗口**——DSH 只在"路由/容量变化"时才发
+`request/context`，重启后路由没变就一直等不到，于是 `percent` 永远缺省、环不出现。
+
+修复：
+
+- `ContextMeter.setWindow()`：允许先有 usage、后补窗口；
+- `Mind` 在拿到 `assistant/message` 但窗口未知时，用宿主 `llm.resolveModel(provider, model)`
+  解析 `contextWindow`（结果按 路由/模型 缓存）；
+- 新增配置兜底 `mind.context.windowTokens`（0 = 自动；自动失败时可手填，例如 1048576）；
+- 新增 1 条单测；真实会话回放仍为 `683,345 / 1,048,576 = 65.2%`。
+
+---
+
 ## [0.5.2] —— 修复：DSH 事件载荷在 `data` 里，上下文与工作记忆之前一直为空
 
 一句话：**0.5.0/0.5.1 读错了事件层级**——`session/event` 的形状是 `{ type, seq, time, data }`，

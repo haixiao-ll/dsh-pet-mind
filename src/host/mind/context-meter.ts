@@ -148,6 +148,22 @@ export class ContextMeter {
     return best;
   }
 
+  /**
+   * 补一个窗口值（DSH 只在路由/容量变化时才发 request/context，重启后可能一直等不到）。
+   * 已有窗口时不覆盖；没有快照（还没 usage）时忽略。
+   */
+  setWindow(sessionId: string, contextWindow: number): void {
+    const prev = this.bySession.get(sessionId);
+    if (!prev) return;
+    if (!Number.isFinite(contextWindow) || contextWindow <= 0) return;
+    this.bySession.set(sessionId, {
+      ...prev,
+      contextWindow,
+      percent: percentOf(prev.usedTokens, contextWindow),
+      at: Date.now(),
+    });
+  }
+
   /** 清掉一条会话（会话被删/被归档时调用；内存不回收会随会话数增长） */
   forget(sessionId: string): void {
     this.bySession.delete(sessionId);

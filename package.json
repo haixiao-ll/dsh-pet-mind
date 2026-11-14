@@ -1,7 +1,7 @@
 {
   "name": "dsh-pet-mind",
-  "version": "0.5.2",
-  "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。0.5.2 增强 fork：恢复 TypeScript 构建链；新增 mind 心智层（上下文用量环、双轨本地记忆、30 秒专注建议：本地 OCR → 文本模型，只建议不操作）。不录屏、默认不截帧、敏感应用停采；能力边界与合规说明见 README / docs/LIMITATIONS.md / docs/LEGAL.md。",
+  "version": "0.5.3",
+  "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。0.5.3 增强 fork：恢复 TypeScript 构建链；新增 mind 心智层（上下文用量环、双轨本地记忆、30 秒专注建议：本地 OCR → 文本模型，只建议不操作）。不录屏、默认不截帧、敏感应用停采；能力边界与合规说明见 README / docs/LIMITATIONS.md / docs/LEGAL.md。",
   "icon": "assets/logo.png",
   "keywords": [
     "context-window",

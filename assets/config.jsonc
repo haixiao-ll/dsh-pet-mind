@@ -353,7 +353,13 @@
     // —— 上下文用量 ——
     // thresholds：占用比例到多少就提醒（升序，0–1）。只提醒一次/档，跨档才再提醒。
     // notify=false 只计量不开口（设置页仍能看到数字）。
-    "context": { "thresholds": [0.8, 0.95], "notify": true },
+    "context": {
+      "thresholds": [0.8, 0.95],
+      "notify": true,
+      // 模型上下文窗口（token）。0 = 自动（向宿主 llm.resolveModel 查询）。
+      // 如果重启后头顶环一直不显示，可以在这里手动填（例如 deepseek-flash 为 1048576）。
+      "windowTokens": 0
+    },
 
     // —— 双轨记忆 ——
     // autoSummary：到阈值时自动落一份工作记忆（memory/work/*.md，本地抽取，不调模型）。
