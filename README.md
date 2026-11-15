@@ -85,32 +85,39 @@
 | OCR | Windows 自带 OCR 需安装**中文语言包**（设置 → 时间和语言 → 语言 → 中文 → 可选功能） |
 | 模型 | 需要 DSH 里已配置可用的对话模型；建议使用你在用的文本模型（`suggestion.model` 留空 = 跟随对话模型） |
 | 权限 | 不需要管理员权限；提权窗口读不到标题，会直接不采集 |
-| 构建 | Node ≥ 22.12（仅从源码构建时需要；装 tgz 不需要） |
+| 构建 | Node ≥ 22.12（仅从源码构建时需要；npm/tgz 安装不需要） |
 
 ## 安装
 
-**没有发布到 npm**。用本地 tgz（[Releases](../../releases) 或 `npm pack` 产物）：
-
-**直接安装：**
-
-1）安装前要先卸载之前版本，重新启动dsh软件。
-
-2）直接安装，在dsh软件直接用本地 tgz 安装,在插件页面输入"路径\dsh-pet-mind-0.5.0.tgz"点击安装。
-
-<p align="center"><img src="./docs/2026-11-15%20014659.jpg" ></p>
+**从 npm 安装（推荐）**
 
 ```bat
-:: 1) 旧插件与本插件共用 entry id dsh-pet，先卸旧的
+dsh plugin --profile desktop add dsh-pet-mind@0.5.0
+```
+
+也可以在 DSH 桌面应用「插件管理」里直接安装 `dsh-pet-mind`。
+
+> 装完**完全退出 DSH 再启动**。如果你之前装过旧 fork（`@tuweizhi/dsh-pet`，与本插件共用 entry id `dsh-pet`），
+> 先 `dsh plugin --profile desktop remove @tuweizhi/dsh-pet` 再装本包。
+
+**本地 tgz（离线/内网）**
+
+[Releases](../../releases) 或 `npm pack` 产物，在插件管理页选择 tgz 安装：
+
+<p align="center"><img src="./docs/2026-11-15%20014659.jpg" alt="DSH 插件管理里选择本地 tgz"></p>
+
+```bat
+:: 1) 卸旧 fork（只装过本插件可跳过）
 "...\dsh.cmd" plugin --profile desktop remove @tuweizhi/dsh-pet
 
 :: 2) 装本包
 "...\dsh.cmd" plugin --profile desktop add "路径\dsh-pet-mind-0.5.0.tgz"
 
-:: 3) 完全退出 DSH 再启动（不要在运行中热装后指望立即生效）
+:: 3) 完全退出 DSH 再启动
 ```
 
 `dsh web` 用户把 `--profile desktop` 换成 `--profile web`，然后重启 `dsh web`。
-详细步骤、配置片段、排查与回滚见 [docs/INSTALL-LOCAL.md](docs/INSTALL-LOCAL.md)。
+详细步骤、离线安装、排查与回滚见 [docs/INSTALL-LOCAL.md](docs/INSTALL-LOCAL.md)。
 
 **独立模式**（不打开 DSH，仅桌宠）：
 

@@ -1,5 +1,9 @@
 # 发布指南（GitHub / Gitee / npm）
 
+> 当前状态：**0.5.0 已发布到 npm**（https://www.npmjs.com/package/dsh-pet-mind），
+> 仓库 https://github.com/haixiao-ll/dsh-pet-mind，CI 绿。
+> 下次改动后要发新版：改 `version` + CHANGELOG，再按第 4 节发布；**同一版本不能重复发**。
+>
 > 目标：把这个仓库变成**你自己名下**的项目，同时不踩 MIT 的坑。
 > 全程只需要改 3 个地方（包名 / 模块 id / 挂载行），其余交给 git。
 

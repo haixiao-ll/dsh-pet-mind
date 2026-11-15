@@ -1,7 +1,18 @@
-# 本地安装到 DSH（不经过 npm）
+# 安装到 DSH（npm / 本地 tgz）
 
-> 适用：机器上已经装着旧的 `@tuweizhi/dsh-pet`（它和本插件**用同一个 entry id `dsh-pet`**，
-> 不能并存，必须先卸旧的）。装完后桌宠状态、`main-config.jsonc`、`memory.json` 都在原位置，不会丢。
+> 首选从 npm 安装（见下）；本文后面是**离线/内网用本地 tgz** 的完整步骤。
+> 如果机器上装过旧的 `@tuweizhi/dsh-pet`（与本插件**共用 entry id `dsh-pet`**），必须先卸旧的。
+> 装完后桌宠状态、`main-config.jsonc`、`memory.json` 都在原位置，不会丢。
+
+## 最快：从 npm 安装
+
+```bat
+dsh plugin --profile desktop add dsh-pet-mind@0.5.0
+```
+
+装完**完全退出 DSH 再启动**，不需要改任何配置。下面的步骤只在你要用本地 tgz 时执行。
+
+---
 
 ---
 
