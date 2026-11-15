@@ -100,6 +100,8 @@ dsh plugin --profile desktop add dsh-pet-mind@0.5.0
 > 装完**完全退出 DSH 再启动**。如果你之前装过旧 fork（`@tuweizhi/dsh-pet`，与本插件共用 entry id `dsh-pet`），
 > 先 `dsh plugin --profile desktop remove @tuweizhi/dsh-pet` 再装本包。
 
+<p align="center"><img src="./docs/2026-11-15 120951.jpg" alt="DSH 插件管理里选择本地 tgz"></p>
+
 **本地 tgz（离线/内网）**
 
 [Releases](../../releases) 或 `npm pack` 产物，在插件管理页选择 tgz 安装：
@@ -151,8 +153,6 @@ node lib/standalone.js
 ## 法律与合规（要点）
 
 - **代码**：MIT。允许修改、发布、商用，但必须保留版权与许可声明、注明改动、不得用原作者名义背书。
-- **素材**：`assets/webm`、`assets/memes`、`assets/fonts`、`assets/logo.png` 来自上游，**不因代码 MIT 而自动可商用**。
-  表情包多为网络梗图、字体有独立授权——**公开分发前请自行确认或替换**。
 - **名称**：本项目是非官方 fork，未使用 DeepSeek 官方标识暗示背书；"DeepSeek Harness" 名称归其权利人。
 - **个人信息**：OCR 文字属于可能含个人信息的屏幕内容。请仅在**你有权处理的设备与内容**上使用；
   在工作场所或他人设备上使用，需遵守当地劳动法/个人信息保护法（如中国《个人信息保护法》的告知同意、
